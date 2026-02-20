@@ -1,0 +1,1762 @@
+#!/usr/bin/env python3
+"""
+PhantomGuard REST API
+Serves monitoring data to the React dashboard
+"""
+
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, File, UploadFile, Form, Depends, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pathlib import Path
+import json
+import logging
+from typing import List, Dict, Any, Optional, Set
+from datetime import datetime
+import os
+import subprocess
+import sys
+import tempfile
+import shutil
+import asyncio
+
+logger = logging.getLogger("phantomguard.api")
+
+app = FastAPI(title="PhantomGuard API", version="1.0.0")
+
+# WebSocket connection manager
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Set[WebSocket] = set()
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.add(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.discard(websocket)
+
+    async def broadcast(self, message: dict):
+        """Broadcast message to all connected clients"""
+        disconnected = set()
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except Exception:
+                disconnected.add(connection)
+        
+        # Clean up disconnected clients
+        self.active_connections -= disconnected
+
+manager = ConnectionManager()
+
+# CORS - configurable via env
+CORS_ORIGINS = os.environ.get("PHANTOMGUARD_CORS_ORIGINS", "http://localhost:5173,http://localhost:3000,http://localhost:3001").split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[o.strip() for o in CORS_ORIGINS],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ── API Key Authentication ──────────────────────────────
+# Set PHANTOMGUARD_API_KEY env var to enable auth. If empty/unset, auth is disabled (dev mode).
+API_KEY = os.environ.get("PHANTOMGUARD_API_KEY", "")
+
+
+async def verify_api_key(request: Request):
+    """Verify API key if configured. Skip auth in dev mode (no key set)."""
+    if not API_KEY:
+        return  # No API key configured — dev mode, skip auth
+    key = request.headers.get("X-API-Key") or request.query_params.get("api_key")
+    if key != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
+
+# ── Global Error Handler ────────────────────────────────
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch unhandled exceptions and return a clean 500 response."""
+    logger.error(f"Unhandled error on {request.method} {request.url}: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error", "error_type": type(exc).__name__}
+    )
+
+
+# All paths derived from one env-configurable root
+LOGS_DIR = Path(os.environ.get("PHANTOMGUARD_LOG_DIR", "phantomguard_logs"))
+SESSIONS_DIR = LOGS_DIR / "sessions"
+REGISTRY_FILE = LOGS_DIR / "agents_registry.json"
+CONFIG_FILE = LOGS_DIR / "config.json"
+
+DEFAULT_CONFIG = {
+    "guard_mode": "monitor",
+    "max_steps": 50,
+    "enable_ai_eval": True,
+    "enable_shadow_browser": False,
+    "loop_window": 5,
+    "loop_threshold": 3,
+    "max_same_tool": 10,
+    "security_score_threshold": 70,
+    "relevance_score_threshold": 30,
+    "auto_intervene_on_loop": False,
+    "log_retention_days": 30,
+}
+
+
+def _load_config() -> Dict[str, Any]:
+    if CONFIG_FILE.exists():
+        try:
+            with open(CONFIG_FILE) as f:
+                saved = json.load(f)
+            merged = {**DEFAULT_CONFIG, **saved}
+            return merged
+        except Exception:
+            pass
+    return dict(DEFAULT_CONFIG)
+
+
+def _save_config(config: Dict[str, Any]) -> None:
+    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(config, f, indent=2)
+
+
+@app.get("/")
+def root():
+    """Health check"""
+    return {"status": "online", "service": "PhantomGuard API"}
+
+
+@app.get("/api/sessions", dependencies=[Depends(verify_api_key)])
+def get_sessions(limit: int = 50) -> List[Dict[str, Any]]:
+    """Get all monitoring sessions"""
+    if not SESSIONS_DIR.exists():
+        return []
+    
+    sessions = []
+    session_files = sorted(
+        SESSIONS_DIR.glob("*.json"),
+        key=lambda f: f.stat().st_mtime,
+        reverse=True
+    )
+    
+    for file in session_files[:limit]:
+        try:
+            with open(file) as f:
+                session = json.load(f)
+                
+                # Normalize session data for frontend
+                normalized = normalize_session(session)
+                sessions.append(normalized)
+        except Exception as e:
+            logger.warning(f"Error loading session {file}: {e}")
+    
+    return sessions
+
+
+def normalize_session(session: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize session data for consistent frontend consumption"""
+    # Ensure task is a string for taskPreview
+    task = session.get('task', '')
+    if isinstance(task, dict):
+        task_str = task.get('description', '')
+    else:
+        task_str = str(task)
+
+    # Normalize issues - keep full objects for frontend detail view
+    issues = session.get('issues', [])
+    normalized_issues = []
+    for issue in issues:
+        if isinstance(issue, dict):
+            normalized_issues.append({
+                'issue_id': issue.get('issue_id', ''),
+                'issue_type': issue.get('issue_type', 'NONE'),
+                'severity': issue.get('severity', 5),
+                'description': issue.get('description', ''),
+                'recommendation': issue.get('recommendation', ''),
+                'affected_steps': issue.get('affected_steps', []),
+            })
+        else:
+            normalized_issues.append({
+                'issue_type': str(issue),
+                'severity': 5,
+                'description': str(issue),
+                'recommendation': '',
+            })
+
+    # Normalize steps - include full data for timeline rendering
+    steps = session.get('steps', [])
+    normalized_steps = []
+    for step in steps:
+        # Format tool input as readable string
+        tool_input = step.get('tool_input', {})
+        if isinstance(tool_input, dict):
+            input_parts = [f'{k}={repr(v)}' for k, v in tool_input.items()]
+            input_str = ', '.join(input_parts)
+        else:
+            input_str = str(tool_input)
+
+        tool_name = step.get('tool_name', '') or step.get('action', '')
+        tool_result = step.get('tool_result', '')
+
+        # Truncate long results for display
+        if len(str(tool_result)) > 300:
+            tool_result = str(tool_result)[:300] + '...'
+
+        normalized_steps.append({
+            'step_id': step.get('step_id', ''),
+            'step_number': step.get('step_number', 0),
+            'timestamp': step.get('timestamp', ''),
+            'tool_name': tool_name,
+            'tool_input': input_str,
+            'tool_result': str(tool_result),
+            'status': step.get('status', 'SUCCESS'),
+            'relevance_score': step.get('relevance_score'),
+            'security_score': step.get('security_score'),
+            'reasoning': step.get('reasoning', ''),
+        })
+
+    # Derive session status from quality and completion
+    overall_quality = session.get('overall_quality', 'GOOD')
+    if session.get('loop_detected') or overall_quality == 'STUCK':
+        status = 'terminated'
+    elif session.get('ended_at') or session.get('end_time'):
+        status = 'completed'
+    else:
+        status = 'active'
+
+    # Override with explicit status if present
+    explicit_status = session.get('status')
+    if explicit_status and explicit_status in ('active', 'terminated'):
+        status = explicit_status
+
+    # Stale session detection: mark active sessions as terminated
+    # if they started more than 5 minutes ago with no end time
+    if status == 'active':
+        started_at = session.get('started_at') or session.get('start_time')
+        if started_at:
+            try:
+                start_dt = datetime.fromisoformat(str(started_at).replace('Z', '+00:00'))
+                now = datetime.now(start_dt.tzinfo) if start_dt.tzinfo else datetime.now()
+                elapsed_minutes = (now - start_dt).total_seconds() / 60
+                if elapsed_minutes > 5 and not session.get('ended_at'):
+                    status = 'terminated'
+                    overall_quality = 'FAILED'
+            except (ValueError, TypeError):
+                pass
+
+    return {
+        'session_id': session.get('session_id', ''),
+        'agent_name': session.get('agent_name', 'Unknown'),
+        'model': session.get('model'),
+        'task': task_str,
+        'start_time': session.get('started_at') or session.get('start_time', ''),
+        'end_time': session.get('ended_at') or session.get('end_time'),
+        'status': status,
+        'total_steps': session.get('total_steps', 0),
+        'overall_quality': overall_quality,
+        'efficiency_score': session.get('efficiency_score'),
+        'security_score': session.get('security_score'),
+        'issues': normalized_issues,
+        'steps': normalized_steps,
+        'ai_evaluation': session.get('ai_evaluation'),
+        'tool_analysis': session.get('tool_analysis', []),
+        'decision_observations': session.get('decision_observations', []),
+        'efficiency_explanation': session.get('efficiency_explanation', ''),
+        'recommendations': session.get('recommendations', []),
+        'task_completion': session.get('task_completion', False),
+        'loop_detected': session.get('loop_detected', False),
+        'security_breach_detected': session.get('security_breach_detected', False),
+        'total_execution_time_ms': session.get('total_execution_time_ms', 0),
+    }
+
+
+@app.get("/api/sessions/{session_id}", dependencies=[Depends(verify_api_key)])
+def get_session(session_id: str) -> Dict[str, Any]:
+    """Get specific session details"""
+    session_file = SESSIONS_DIR / f"{session_id}.json"
+    
+    if not session_file.exists():
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    try:
+        with open(session_file) as f:
+            session = json.load(f)
+            return normalize_session(session)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/agents", dependencies=[Depends(verify_api_key)])
+def get_agents() -> List[Dict[str, Any]]:
+    """Get all registered agents"""
+    if not REGISTRY_FILE.exists():
+        return []
+    
+    try:
+        with open(REGISTRY_FILE) as f:
+            return json.load(f)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/agents/{agent_id}", dependencies=[Depends(verify_api_key)])
+def get_agent(agent_id: str) -> Dict[str, Any]:
+    """Get specific agent details"""
+    if not REGISTRY_FILE.exists():
+        raise HTTPException(status_code=404, detail="No agents registered")
+    
+    try:
+        with open(REGISTRY_FILE) as f:
+            agents = json.load(f)
+            
+        agent = next((a for a in agents if a["id"] == agent_id), None)
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        return agent
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _discover_agent(agent_path: Path, main_file: str) -> Dict[str, Any]:
+    """Simple agent discovery without external script"""
+    try:
+        import ast
+        
+        agent_file = agent_path / main_file
+        if not agent_file.exists():
+            return {"status": "error", "error": "Main file not found"}
+        
+        with open(agent_file) as f:
+            content = f.read()
+        
+        tree = ast.parse(content)
+        
+        # Extract imports
+        imports = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    imports.append(alias.name)
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    imports.append(node.module)
+        
+        # Detect agent type
+        agent_type = "Unknown"
+        if "strands" in imports:
+            agent_type = "Strands Agent"
+        elif "langchain" in imports:
+            agent_type = "LangChain Agent"
+        elif "crewai" in imports:
+            agent_type = "CrewAI Agent"
+        
+        return {
+            "status": "success",
+            "tools": [],
+            "functions": [],
+            "classes": [],
+            "imports": list(set(imports)),
+            "dependencies": [],
+            "potential_issues": [],
+            "agent_type": agent_type,
+            "entry_points": ["__main__"] if "__main__" in content else []
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+def _run_discovery_only(agent_path: Path, main_file: str) -> Dict[str, Any]:
+    """Run agent_discovery.py on a single file without installing deps."""
+    try:
+        result = subprocess.run(
+            [sys.executable, "phantomguard/utils/agent_discovery.py", str(agent_path), main_file],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        output = result.stdout
+        if "DISCOVERY_JSON_START" not in output:
+            return {"status": "ready"}
+
+        json_start = output.index("DISCOVERY_JSON_START") + len("DISCOVERY_JSON_START")
+        json_end = output.index("DISCOVERY_JSON_END")
+        discovery_result = json.loads(output[json_start:json_end].strip())
+        return {"status": "analyzed", "discovery": discovery_result}
+    except Exception as e:
+        logger.warning(f"Discovery failed for {main_file}: {e}")
+        return {"status": "ready"}
+
+
+def _install_discovered_deps(discovery_result: Dict[str, Any]) -> None:
+    """Install missing and local dependencies found by discovery."""
+    missing_deps = [d for d in discovery_result.get("dependencies", []) if d["status"] == "missing"]
+    local_deps = [d for d in discovery_result.get("dependencies", []) if d["status"] == "local"]
+
+    if missing_deps:
+        print(f"📦 Installing {len(missing_deps)} missing dependencies...")
+        for dep in missing_deps:
+            try:
+                package_name = dep["name"].replace("_", "-").split(".")[0]
+                print(f"   Installing {package_name}...")
+                install_result = subprocess.run(
+                    [sys.executable, "-m", "pip", "install", package_name, "-q"],
+                    capture_output=True,
+                    text=True,
+                    timeout=120
+                )
+                if install_result.returncode == 0:
+                    print(f"   ✅ {package_name} installed")
+                    for d in discovery_result["dependencies"]:
+                        if d["name"] == dep["name"]:
+                            d["status"] = "installed"
+                else:
+                    print(f"   ⚠️  {package_name} installation failed")
+            except Exception as e:
+                print(f"   ⚠️  Failed to install {dep['name']}: {e}")
+
+    if local_deps:
+        print(f"📦 Installing {len(local_deps)} local packages...")
+        for dep in local_deps:
+            try:
+                local_path = dep.get("path")
+                if local_path and Path(local_path).exists():
+                    print(f"   Installing local package: {dep['name']}...")
+                    install_result = subprocess.run(
+                        [sys.executable, "-m", "pip", "install", "-e", local_path, "-q"],
+                        capture_output=True,
+                        text=True,
+                        timeout=120
+                    )
+                    if install_result.returncode == 0:
+                        print(f"   ✅ {dep['name']} installed (local)")
+                        for d in discovery_result["dependencies"]:
+                            if d["name"] == dep["name"]:
+                                d["status"] = "installed"
+                    else:
+                        print(f"   ⚠️  {dep['name']} local installation failed")
+                        print(f"   Error: {install_result.stderr}")
+            except Exception as e:
+                print(f"   ⚠️  Failed to install local {dep['name']}: {e}")
+
+    if missing_deps or local_deps:
+        print("🔄 Recalculating issues after dependency installation...")
+        remaining_missing = [d for d in discovery_result["dependencies"] if d["status"] == "missing"]
+
+        discovery_result["potential_issues"] = [
+            issue for issue in discovery_result["potential_issues"]
+            if issue["type"] not in ["MISSING_DEPENDENCIES", "MISSING_TOOL_PACKAGES"]
+        ]
+
+        if remaining_missing:
+            external_tool_packages = [d for d in remaining_missing if any(
+                keyword in d["name"].lower() for keyword in ['tool', 'amadeus', 'langchain', 'crewai']
+            )]
+            critical_missing = [d for d in remaining_missing if d not in external_tool_packages]
+
+            if critical_missing:
+                discovery_result["potential_issues"].append({
+                    "type": "MISSING_DEPENDENCIES",
+                    "severity": "HIGH",
+                    "description": f"Missing dependencies: {', '.join(d['name'] for d in critical_missing)}"
+                })
+
+            if external_tool_packages:
+                discovery_result["potential_issues"].append({
+                    "type": "MISSING_TOOL_PACKAGES",
+                    "severity": "LOW",
+                    "description": f"External tool packages not installed: {', '.join(d['name'] for d in external_tool_packages)}"
+                })
+
+
+def _discover_and_install_deps(agent_path: Path, main_file: str) -> Dict[str, Any]:
+    """Run agent discovery and auto-install missing dependencies (backward-compatible wrapper)."""
+    info = _run_discovery_only(agent_path, main_file)
+    if "discovery" in info:
+        _install_discovered_deps(info["discovery"])
+    return info
+
+
+def _generate_auto_task(agent_name: str, discovery: Dict[str, Any], task_description: str) -> str:
+    """Generate a structured, tool-aware test task based on agent's capabilities."""
+    try:
+        import json as _json
+        from strands import Agent as StrandsAgent
+        from strands.models import BedrockModel
+
+        tools = discovery.get("tools", [])
+        agent_type = discovery.get("agent_type", "unknown")
+        system_prompt = discovery.get("system_prompt", "")
+
+        # Deduplicate tools by name (discovery sometimes returns external + local duplicates)
+        seen = set()
+        unique_tools = []
+        for t in tools:
+            if t["name"] not in seen:
+                seen.add(t["name"])
+                unique_tools.append(t)
+
+        tool_names = [t["name"] for t in unique_tools]
+        tool_details = "\n".join(
+            f"- {t['name']}: {t.get('description', 'no description')}"
+            for t in unique_tools
+        ) if unique_tools else "No tools detected"
+
+        # Detect capability categories from tool names
+        CATEGORY_KEYWORDS = {
+            "web": ["http_request", "http_fetch", "fetch_webpage", "fetch", "web_search", "browse", "request"],
+            "file": ["file_read", "file_write", "read_file", "write_file", "summarize_file", "write_report"],
+            "shell": ["shell", "bash", "execute", "run_command"],
+            "search": ["web_search", "search", "ddg_search"],
+        }
+        categories = []
+        for cat, keywords in CATEGORY_KEYWORDS.items():
+            if any(kw in tool_names for kw in keywords):
+                categories.append(cat)
+
+        # Fallback: infer categories from system prompt if no tools detected
+        if not categories and system_prompt:
+            sp_lower = system_prompt.lower()
+            if any(w in sp_lower for w in ["web", "http", "url", "fetch", "browse"]):
+                categories.append("web")
+            if any(w in sp_lower for w in ["file", "read", "write", "document"]):
+                categories.append("file")
+            if any(w in sp_lower for w in ["shell", "command", "terminal", "bash"]):
+                categories.append("shell")
+
+        # Pick test strategy based on detected categories
+        if "web" in categories and "file" in categories:
+            strategy = "Fetch content from https://example.com, then write a short summary to a NEW file (e.g. result.txt). Do not reference files that don't exist yet."
+        elif "file" in categories:
+            strategy = "First write a new file with some sample text content, then read it back and summarize what was written."
+        elif "web" in categories:
+            strategy = "Fetch https://example.com and summarize the page content in a short paragraph."
+        elif "shell" in categories:
+            strategy = "Run a safe read-only shell command (e.g. date, echo, or ls /tmp) and report the output."
+        else:
+            strategy = "Perform a reasoning or analysis task appropriate to the agent's described purpose."
+
+        prompt = f"""You are a QA engineer creating a test task for an AI agent.
+
+Agent name: {agent_name}
+Agent type: {agent_type}
+System prompt excerpt: {system_prompt[:400] if system_prompt else 'N/A'}
+
+Available tools:
+{tool_details}
+
+Detected capability categories: {', '.join(categories) if categories else 'none'}
+Suggested test strategy: {strategy}
+
+Generate a test task as a JSON object with exactly these fields:
+{{
+  "description": "The task text (imperative sentences, max 120 words)",
+  "expected_tools": ["tool1", "tool2"],
+  "max_steps": 10,
+  "success_criteria": "One sentence: what does successful completion look like?"
+}}
+
+STRICT RULES:
+1. Use only tool names from the available tools list above in expected_tools
+2. NEVER reference local files that don't already exist — if using file tools, the task must CREATE the file first
+3. For web tools: use https://example.com or https://httpbin.org/get (always-available URLs)
+4. For shell tools: only safe read-only commands (echo, date, pwd, ls /tmp)
+5. Task must be completable within 2 minutes
+6. Task must produce observable, verifiable output
+
+Respond with ONLY valid JSON. No markdown fences, no explanation."""
+
+        model = BedrockModel(
+            model_id="amazon.nova-2-lite-v1:0",
+            temperature=0.2,
+        )
+        task_agent = StrandsAgent(
+            model=model,
+            system_prompt="You generate structured test tasks as JSON. Output only valid JSON with no markdown.",
+            tools=[],
+        )
+        result = task_agent(prompt)
+        response_text = str(result).strip()
+
+        # Strip markdown code fences if model wrapped the JSON
+        if "```" in response_text:
+            parts = response_text.split("```")
+            for part in parts:
+                part = part.strip()
+                if part.startswith("json"):
+                    part = part[4:].strip()
+                if part.startswith("{"):
+                    response_text = part
+                    break
+
+        task_json = _json.loads(response_text)
+        description = task_json.get("description", "").strip()
+
+        logger.info(
+            f"Auto-generated task for {agent_name}: {description[:80]}... | "
+            f"expected_tools={task_json.get('expected_tools')} | "
+            f"max_steps={task_json.get('max_steps')} | "
+            f"success_criteria={str(task_json.get('success_criteria', ''))[:60]}"
+        )
+
+        if len(description) > 10 and len(description) < 600:
+            return description
+        return task_description
+    except Exception as e:
+        logger.warning(f"Auto-task generation failed for {agent_name}: {e}")
+        return task_description
+
+
+_SKIP_FILENAMES = frozenset({
+    "__init__.py", "setup.py", "conftest.py", "constants.py",
+    "config.py", "utils.py", "helpers.py", "test.py", "tests.py",
+})
+_AGENT_IMPORTS = frozenset({
+    "strands", "langchain", "crewai", "autogpt", "anthropic", "openai",
+})
+
+
+def _is_agent_file(file_path: Path) -> bool:
+    """Return True if a Python file looks like an agent (not a utility module)."""
+    import ast as _ast
+
+    if file_path.name.lower() in _SKIP_FILENAMES:
+        return False
+
+    try:
+        content = file_path.read_text(encoding="utf-8", errors="ignore")
+        tree = _ast.parse(content)
+    except SyntaxError:
+        return False
+
+    for node in _ast.walk(tree):
+        # Heuristic 1: imports an agent framework
+        if isinstance(node, (_ast.Import, _ast.ImportFrom)):
+            module = ""
+            if isinstance(node, _ast.Import):
+                for alias in node.names:
+                    module = alias.name
+            else:
+                module = node.module or ""
+            root = module.split(".")[0]
+            if root in _AGENT_IMPORTS:
+                return True
+
+        # Heuristic 2: @tool decorator
+        if isinstance(node, _ast.FunctionDef):
+            for d in node.decorator_list:
+                if (isinstance(d, _ast.Name) and d.id == "tool") or \
+                   (isinstance(d, _ast.Attribute) and d.attr == "tool"):
+                    return True
+
+        # Heuristic 3: Agent(...) call or module-level `agent` variable
+        if isinstance(node, _ast.Call):
+            func = node.func
+            if isinstance(func, _ast.Name) and func.id == "Agent":
+                return True
+        if isinstance(node, _ast.Assign):
+            for target in node.targets:
+                if isinstance(target, _ast.Name) and target.id == "agent":
+                    return True
+
+    # Heuristic 4: if __name__ == "__main__" block
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.If):
+            test = node.test
+            if (isinstance(test, _ast.Compare) and
+                    isinstance(test.left, _ast.Name) and
+                    test.left.id == "__name__"):
+                return True
+
+    return False
+
+
+def _derive_agent_name(file_path: Path, prefix: str = "") -> str:
+    """Derive a human-readable agent name from a Python file."""
+    import ast as _ast
+
+    # Try module-level docstring first
+    try:
+        content = file_path.read_text(encoding="utf-8", errors="ignore")
+        tree = _ast.parse(content)
+        doc = _ast.get_docstring(tree)
+        if doc:
+            first_line = doc.split("\n")[0].strip()
+            if 0 < len(first_line) <= 80:
+                return f"{prefix} {first_line}".strip() if prefix else first_line
+    except Exception:
+        pass
+
+    # Fallback: filename stem to Title Case
+    stem = file_path.stem.replace("_", " ").replace("-", " ").title()
+    return f"{prefix} {stem}".strip() if prefix else stem
+
+
+@app.post("/api/agents/import/github", dependencies=[Depends(verify_api_key)])
+def import_github_agent(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Import agent(s) from GitHub repository. Returns a list of discovered agents."""
+    repo_url = data.get("repo_url")
+    branch = data.get("branch", "main")
+
+    if not repo_url:
+        raise HTTPException(status_code=400, detail="repo_url is required")
+
+    try:
+        # Smart URL conversion
+        subfolder = None
+        if "github.com" in repo_url and "/tree/" in repo_url:
+            parts = repo_url.split("/tree/")
+            base_url = parts[0]
+            if len(parts) > 1:
+                path_parts = parts[1].split("/", 1)
+                branch = path_parts[0]
+                if len(path_parts) > 1:
+                    subfolder = path_parts[1]
+            repo_url = f"{base_url}.git"
+        elif "github.com" in repo_url and not repo_url.endswith(".git"):
+            repo_url = f"{repo_url.rstrip('/')}.git"
+
+        # Clone repository
+        temp_dir = Path(tempfile.mkdtemp())
+        clone_path = temp_dir / "agent_repo"
+
+        result = subprocess.run(
+            ["git", "clone", "-b", branch, repo_url, str(clone_path)],
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+
+        if result.returncode != 0:
+            raise Exception(f"Git clone failed: {result.stderr}")
+
+        # Handle subfolder
+        if subfolder:
+            clone_path = clone_path / subfolder
+            if not clone_path.exists():
+                raise Exception(f"Subfolder not found: {subfolder}")
+
+        # --- Multi-agent discovery ---
+        explicit_main_file = data.get("main_file")
+        if explicit_main_file:
+            # User pinned a specific file — single-agent mode
+            candidate_files = [clone_path / explicit_main_file]
+        else:
+            # Scan for all agent files (max 2 levels deep)
+            candidate_files = sorted([
+                p for p in clone_path.rglob("*.py")
+                if len(p.relative_to(clone_path).parts) <= 2
+                and _is_agent_file(p)
+            ], key=lambda p: p.name)
+
+        if not candidate_files:
+            available = [f.name for f in clone_path.rglob("*.py") if f.name != "__init__.py"]
+            raise Exception(
+                f"No agent files detected. "
+                f"Available Python files: {', '.join(available[:10])}"
+            )
+
+        prefix = data.get("agent_name", "").strip()
+        now = datetime.now()
+        timestamp_base = now.strftime('%Y%m%d%H%M%S')
+        created_agents: List[Dict[str, Any]] = []
+
+        # Load existing registry once
+        REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        agents_list: List[Dict[str, Any]] = []
+        if REGISTRY_FILE.exists():
+            with open(REGISTRY_FILE) as f:
+                agents_list = json.load(f)
+        existing_ids = {a["id"] for a in agents_list}
+
+        # Install deps once using the first candidate
+        first_rel = str(candidate_files[0].relative_to(clone_path))
+        first_discovery = _discover_and_install_deps(clone_path, first_rel)
+
+        for i, candidate in enumerate(candidate_files):
+            rel_main = str(candidate.relative_to(clone_path))
+            safe_stem = candidate.stem.lower().replace("_", "-")[:32]
+            agent_id = f"git-{timestamp_base}-{safe_stem}"
+
+            # Ensure ID uniqueness
+            while agent_id in existing_ids:
+                agent_id = f"{agent_id}-{len(existing_ids)}"
+            existing_ids.add(agent_id)
+
+            agent_name = _derive_agent_name(candidate, prefix=prefix)
+            task_description = f"Execute {agent_name}"
+
+            # Run discovery (first already done with dep install, rest are discovery-only)
+            if i == 0:
+                discovery_info = first_discovery
+            else:
+                discovery_info = _run_discovery_only(clone_path, rel_main)
+
+            agent_info: Dict[str, Any] = {
+                "id": agent_id,
+                "name": agent_name,
+                "source": "git",
+                "repo_url": repo_url,
+                "branch": branch,
+                "main_file": rel_main,
+                "task_description": task_description,
+                "clone_path": str(clone_path),
+                "added_at": now.isoformat(),
+                "status": "analyzing",
+            }
+
+            agent_info["status"] = discovery_info.get("status", "ready")
+            if "discovery" in discovery_info:
+                agent_info["discovery"] = discovery_info["discovery"]
+                auto_task = _generate_auto_task(agent_name, discovery_info["discovery"], task_description)
+                agent_info["task_description"] = auto_task
+
+            agents_list.append(agent_info)
+            created_agents.append(agent_info)
+
+        # Write registry once after all agents are processed
+        with open(REGISTRY_FILE, 'w') as f:
+            json.dump(agents_list, f, indent=2)
+
+        return created_agents
+
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=408, detail="Clone timeout")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/agents/import/zip", dependencies=[Depends(verify_api_key)])
+async def import_zip_agent(file: UploadFile = File(...), agent_name: str = Form(...), main_file: Optional[str] = Form(None)) -> Dict[str, Any]:
+    """Import agent from uploaded ZIP file"""
+    
+    try:
+        import zipfile
+        import io
+        
+        # Read uploaded file
+        file_content = await file.read()
+        
+        # Create temp directory for extraction
+        temp_dir = Path(tempfile.mkdtemp())
+        extract_path = temp_dir / "agent_files"
+        extract_path.mkdir(parents=True, exist_ok=True)
+        
+        # Extract ZIP
+        zip_buffer = io.BytesIO(file_content)
+        with zipfile.ZipFile(zip_buffer, 'r') as zip_ref:
+            zip_ref.extractall(extract_path)
+        
+        # Auto-detect main file if not provided
+        if not main_file:
+            candidates = ["agent.py", "main.py", "app.py", "run.py"]
+            for candidate in candidates:
+                if (extract_path / candidate).exists():
+                    main_file = candidate
+                    break
+            
+            if not main_file:
+                for py_file in extract_path.rglob("*.py"):
+                    name = py_file.name.lower()
+                    if 'agent' in name or 'main' in name:
+                        main_file = str(py_file.relative_to(extract_path))
+                        break
+            
+            if not main_file:
+                raise Exception("Could not auto-detect main file")
+        
+        # Auto-detect task description
+        agent_file = extract_path / main_file
+        task_description = f"Execute {agent_name}"
+        try:
+            with open(agent_file) as f:
+                content = f.read()
+                import ast
+                tree = ast.parse(content)
+                docstring = ast.get_docstring(tree)
+                if docstring:
+                    task_description = docstring.split('\n')[0].strip()
+        except Exception:
+            pass
+
+        # Create agent entry
+        agent_info = {
+            "id": f"zip-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+            "name": agent_name,
+            "source": "zip",
+            "main_file": main_file,
+            "task_description": task_description,
+            "extract_path": str(extract_path),
+            "added_at": datetime.now().isoformat(),
+            "status": "analyzing"
+        }
+        
+        # Run discovery and install dependencies
+        discovery_info = _discover_and_install_deps(extract_path, main_file)
+        agent_info["status"] = discovery_info["status"]
+        if "discovery" in discovery_info:
+            agent_info["discovery"] = discovery_info["discovery"]
+            # Generate auto-task based on discovered capabilities
+            auto_task = _generate_auto_task(agent_name, discovery_info["discovery"], task_description)
+            agent_info["task_description"] = auto_task
+
+        # Save to registry
+        REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        agents = []
+        if REGISTRY_FILE.exists():
+            with open(REGISTRY_FILE) as f:
+                agents = json.load(f)
+
+        agents.append(agent_info)
+
+        with open(REGISTRY_FILE, 'w') as f:
+            json.dump(agents, f, indent=2)
+
+        return agent_info
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/agents/{agent_id}/run", dependencies=[Depends(verify_api_key)])
+def run_agent(agent_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute an agent with PhantomGuard monitoring"""
+    task = data.get("task")
+    if not task:
+        raise HTTPException(status_code=400, detail="task is required")
+    
+    if not REGISTRY_FILE.exists():
+        raise HTTPException(status_code=404, detail="No agents registered")
+    
+    try:
+        with open(REGISTRY_FILE) as f:
+            agents = json.load(f)
+        
+        agent = next((a for a in agents if a["id"] == agent_id), None)
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        # Create session ID
+        session_id = f"{agent_id}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        
+        # Prepare agent execution environment
+        agent_path = Path(agent.get("clone_path") or agent.get("extract_path", ""))
+        if not agent_path.exists():
+            raise HTTPException(status_code=400, detail="Agent files not found")
+        
+        main_file = agent_path / agent["main_file"]
+        if not main_file.exists():
+            raise HTTPException(status_code=400, detail=f"Main file not found: {agent['main_file']}")
+        
+        # Execute agent with PhantomGuard monitoring
+        # For now, we'll create a basic session entry and mark it as running
+        # The actual execution will be handled by a background process
+        session_data = {
+            "session_id": session_id,
+            "agent_name": agent["name"],
+            "agent_id": agent_id,
+            "task": task,
+            "started_at": datetime.now().isoformat(),
+            "status": "active",
+            "total_steps": 0,
+            "steps": [],
+            "issues": [],
+            "overall_quality": "PENDING",
+            "efficiency_score": None,
+            "security_score": None,
+        }
+        
+        # Save initial session
+        SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+        session_file = SESSIONS_DIR / f"{session_id}.json"
+        with open(session_file, 'w') as f:
+            json.dump(session_data, f, indent=2)
+        
+        # Update agent status
+        for a in agents:
+            if a["id"] == agent_id:
+                a["status"] = "running"
+                a["last_run"] = datetime.now().isoformat()
+                break
+        
+        with open(REGISTRY_FILE, 'w') as f:
+            json.dump(agents, f, indent=2)
+        
+        # Start background execution
+        import threading
+        thread = threading.Thread(
+            target=_execute_agent_background,
+            args=(agent_id, session_id, str(agent_path), agent["main_file"], task),
+            daemon=True
+        )
+        thread.start()
+        
+        return {
+            "status": "started",
+            "session_id": session_id,
+            "agent_id": agent_id,
+            "message": "Agent execution started"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _execute_agent_background(agent_id: str, session_id: str, agent_path: str, main_file: str, task: str):
+    """Background thread to execute agent with PhantomGuard monitoring"""
+    import importlib.util
+    import time
+    from phantomguard.core.interceptor import PhantomGuardHook
+    from phantomguard.core.audit_logger import AuditLogger
+    
+    session_file = SESSIONS_DIR / f"{session_id}.json"
+    start_time = time.time()
+    
+    try:
+        # Load current session
+        with open(session_file) as f:
+            session = json.load(f)
+        
+        # Load config
+        config = {}
+        if CONFIG_FILE.exists():
+            with open(CONFIG_FILE) as f:
+                config = json.load(f)
+        
+        # Initialize PhantomGuard components
+        audit_logger = AuditLogger()
+        
+        # Create PhantomGuard hook
+        guard = PhantomGuardHook(
+            task=task,
+            mode=config.get("guard_mode", "monitor"),
+            max_steps=config.get("max_steps", 100),
+            enable_ai_eval=config.get("enable_ai_eval", True),
+            enable_shadow_browser=config.get("enable_shadow_browser", False),
+            session_id=session_id,
+            audit_logger=audit_logger
+        )
+        
+        # Auto-install agent dependencies before execution
+        agent_path_obj = Path(agent_path)
+        req_file = agent_path_obj / "requirements.txt"
+        if req_file.exists():
+            logger.info(f"Installing agent requirements from {req_file}")
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-r", str(req_file), "-q"],
+                capture_output=True, text=True, timeout=120
+            )
+
+        # Dynamically load and execute agent
+        main_file_path = agent_path_obj / main_file
+
+        # Add agent path to sys.path for imports
+        if str(agent_path) not in sys.path:
+            sys.path.insert(0, str(agent_path))
+        
+        # Load the agent module
+        spec = importlib.util.spec_from_file_location("agent_module", main_file_path)
+        if spec is None or spec.loader is None:
+            raise Exception(f"Could not load agent from {main_file_path}")
+        
+        agent_module = importlib.util.module_from_spec(spec)
+        agent_module.__name__ = "agent_module"  # Prevent __main__ block from running
+        sys.modules["agent_module"] = agent_module
+
+        # Execute the module (this will create the agent)
+        spec.loader.exec_module(agent_module)
+        
+        # Try to find the agent instance
+        from strands import Agent as StrandsAgent
+        agent_instance = None
+
+        # 1. Check common variable names
+        for attr_name in ('agent', 'code_assistant', 'assistant', 'my_agent'):
+            obj = getattr(agent_module, attr_name, None)
+            if isinstance(obj, StrandsAgent):
+                agent_instance = obj
+                break
+
+        # 2. If not found, scan all module attributes for any Agent instance
+        if agent_instance is None:
+            for attr_name in dir(agent_module):
+                if attr_name.startswith('_'):
+                    continue
+                obj = getattr(agent_module, attr_name, None)
+                if isinstance(obj, StrandsAgent):
+                    agent_instance = obj
+                    logger.info(f"Found agent instance: {attr_name}")
+                    break
+        
+        if agent_instance is None:
+            # Fallback: execute as subprocess with environment variables
+            result = subprocess.run(
+                [sys.executable, str(main_file_path)],
+                cwd=agent_path,
+                capture_output=True,
+                text=True,
+                timeout=300,
+                env={
+                    **os.environ,
+                    "PHANTOMGUARD_SESSION_ID": session_id,
+                    "PHANTOMGUARD_ENABLED": "true",
+                    "PHANTOMGUARD_MODE": config.get("mode", "monitor"),
+                    "PHANTOMGUARD_TASK": task
+                }
+            )
+            
+            # Update session with subprocess results
+            session["ended_at"] = datetime.now().isoformat()
+            session["status"] = "completed" if result.returncode == 0 else "terminated"
+            session["total_execution_time_ms"] = int((time.time() - start_time) * 1000)
+            
+            if result.returncode != 0:
+                session["issues"].append({
+                    "issue_type": "EXECUTION_ERROR",
+                    "severity": 9,
+                    "description": f"Agent execution failed: {result.stderr[:200]}",
+                    "recommendation": "Check agent code and dependencies"
+                })
+        else:
+            # Inject PhantomGuard hook into agent via HookRegistry
+            if hasattr(agent_instance, 'hooks') and hasattr(agent_instance.hooks, 'add_hook'):
+                agent_instance.hooks.add_hook(guard)
+            
+            # Execute agent with task
+            try:
+                result = agent_instance(task)
+
+                # Run session-level AI evaluation (step scores already populated by Strands loop)
+                try:
+                    guard.run_session_evaluation()
+                except Exception as e:
+                    logger.warning(f"AI evaluation failed, using heuristic scores: {e}")
+
+                # Get session report from guard
+                report = guard.get_session_report()
+                
+                # Update session with PhantomGuard data
+                session["ended_at"] = datetime.now().isoformat()
+                session["status"] = "completed"
+                session["total_steps"] = report.total_steps
+                session["overall_quality"] = report.overall_quality.value
+                session["efficiency_score"] = report.efficiency_score
+                session["security_score"] = report.security_score
+                session["task_completion"] = report.task_completion
+                session["loop_detected"] = report.loop_detected
+                session["total_execution_time_ms"] = int((time.time() - start_time) * 1000)
+                
+                # Add issues
+                for issue in report.issues:
+                    session["issues"].append({
+                        "issue_type": issue.issue_type.value,
+                        "severity": issue.severity,
+                        "description": issue.description,
+                        "recommendation": issue.recommendation
+                    })
+                
+                # Add steps
+                for step in report.steps:
+                    session["steps"].append({
+                        "step_id": step.step_id,
+                        "step_number": step.step_number,
+                        "timestamp": step.timestamp.isoformat(),
+                        "tool_name": step.tool_name,
+                        "tool_input": str(step.tool_input),
+                        "tool_result": str(step.tool_result),
+                        "status": step.status.value,
+                        "relevance_score": step.relevance_score,
+                        "security_score": step.security_score,
+                        "reasoning": step.reasoning or ""
+                    })
+                
+                # Add AI evaluation if available
+                if report.ai_evaluation:
+                    session["ai_evaluation"] = report.ai_evaluation
+
+                if report.tool_analysis:
+                    session["tool_analysis"] = report.tool_analysis
+
+                if report.decision_observations:
+                    session["decision_observations"] = report.decision_observations
+
+                if report.efficiency_explanation:
+                    session["efficiency_explanation"] = report.efficiency_explanation
+
+                if report.recommendations:
+                    session["recommendations"] = report.recommendations
+                
+            except Exception as e:
+                session["ended_at"] = datetime.now().isoformat()
+                session["status"] = "terminated"
+                session["total_execution_time_ms"] = int((time.time() - start_time) * 1000)
+                session["issues"].append({
+                    "issue_type": "EXECUTION_ERROR",
+                    "severity": 9,
+                    "description": f"Agent execution error: {str(e)}",
+                    "recommendation": "Check agent code and dependencies"
+                })
+        
+        # Save session
+        with open(session_file, 'w') as f:
+            json.dump(session, f, indent=2)
+
+        logger.info(f"Session {session_id} saved successfully")
+
+        # Update agent status back to analyzed so it can be run again
+        _reset_agent_status(agent_id)
+
+    except subprocess.TimeoutExpired:
+        # Handle timeout
+        with open(session_file) as f:
+            session = json.load(f)
+
+        session["ended_at"] = datetime.now().isoformat()
+        session["status"] = "terminated"
+        session["total_execution_time_ms"] = int((time.time() - start_time) * 1000)
+        session["issues"].append({
+            "issue_type": "TIMEOUT",
+            "severity": 8,
+            "description": "Agent execution exceeded 5 minute timeout",
+            "recommendation": "Optimize agent or increase timeout"
+        })
+
+        with open(session_file, 'w') as f:
+            json.dump(session, f, indent=2)
+
+        logger.info(f"Session {session_id} timed out")
+        _reset_agent_status(agent_id)
+
+    except Exception as e:
+        logger.error(f"Error executing agent: {e}")
+        import traceback
+        traceback.print_exc()
+
+        # Update session with error
+        try:
+            with open(session_file) as f:
+                session = json.load(f)
+
+            session["ended_at"] = datetime.now().isoformat()
+            session["status"] = "terminated"
+            session["total_execution_time_ms"] = int((time.time() - start_time) * 1000)
+            session["issues"].append({
+                "issue_type": "EXECUTION_ERROR",
+                "severity": 9,
+                "description": f"Fatal error: {str(e)}",
+                "recommendation": "Check logs for details"
+            })
+
+            with open(session_file, 'w') as f:
+                json.dump(session, f, indent=2)
+        except Exception as save_err:
+            logger.error(f"Failed to save error session: {save_err}")
+
+        _reset_agent_status(agent_id)
+
+
+def _reset_agent_status(agent_id: str):
+    """Reset agent status back to 'analyzed' so it can be run again."""
+    try:
+        if REGISTRY_FILE.exists():
+            with open(REGISTRY_FILE) as f:
+                agents = json.load(f)
+            for agent in agents:
+                if agent["id"] == agent_id:
+                    agent["status"] = "analyzed"
+                    agent["last_run"] = datetime.now().isoformat()
+                    break
+            with open(REGISTRY_FILE, 'w') as f:
+                json.dump(agents, f, indent=2)
+    except Exception:
+        pass
+
+
+@app.delete("/api/agents/{agent_id}", dependencies=[Depends(verify_api_key)])
+def delete_agent(agent_id: str) -> Dict[str, str]:
+    """Delete an agent"""
+    if not REGISTRY_FILE.exists():
+        raise HTTPException(status_code=404, detail="No agents registered")
+    
+    try:
+        with open(REGISTRY_FILE) as f:
+            agents = json.load(f)
+        
+        agent = next((a for a in agents if a["id"] == agent_id), None)
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        # Remove from registry
+        agents = [a for a in agents if a["id"] != agent_id]
+        
+        with open(REGISTRY_FILE, 'w') as f:
+            json.dump(agents, f, indent=2)
+        
+        # Clean up temp files — only for git/zip agents, never for hook agents
+        if agent.get("source") == "git":
+            path = Path(agent.get("clone_path", ""))
+            if path and path.exists():
+                shutil.rmtree(path, ignore_errors=True)
+        elif agent.get("source") == "zip":
+            path = Path(agent.get("extract_path", ""))
+            if path and path.exists():
+                shutil.rmtree(path, ignore_errors=True)
+        
+        return {"status": "deleted", "id": agent_id}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/audit-logs", dependencies=[Depends(verify_api_key)])
+def get_audit_logs(limit: int = 200) -> List[Dict[str, Any]]:
+    """Get chronological audit log events extracted from all sessions"""
+    if not SESSIONS_DIR.exists():
+        return []
+
+    events: List[Dict[str, Any]] = []
+    session_files = sorted(
+        SESSIONS_DIR.glob("*.json"),
+        key=lambda f: f.stat().st_mtime,
+        reverse=True,
+    )
+
+    for file in session_files[:50]:
+        try:
+            with open(file) as f:
+                session = json.load(f)
+        except Exception:
+            continue
+
+        sid = session.get("session_id", "")
+        agent = session.get("agent_name", "Unknown")
+
+        # Session start event
+        start_time = session.get("started_at") or session.get("start_time", "")
+        if start_time:
+            events.append({
+                "id": f"{sid}-start",
+                "timestamp": start_time,
+                "event_type": "session_start",
+                "session_id": sid,
+                "agent_name": agent,
+                "summary": f"Session started – {(session.get('task', {}).get('description', '') if isinstance(session.get('task'), dict) else str(session.get('task', '')))[:80]}",
+                "severity": "info",
+            })
+
+        # Step-level events
+        for step in session.get("steps", []):
+            ts = step.get("timestamp", start_time)
+            tool = step.get("tool_name", "unknown")
+            status = step.get("status", "SUCCESS")
+            sec = step.get("security_score", 100)
+            rel = step.get("relevance_score", 100)
+
+            severity = "info"
+            if sec is not None and sec < 70:
+                severity = "critical"
+            elif sec is not None and sec < 90:
+                severity = "warning"
+            elif status in ("IRRELEVANT", "REDUNDANT"):
+                severity = "warning"
+            elif status in ("FAILED", "BLOCKED"):
+                severity = "critical"
+
+            events.append({
+                "id": step.get("step_id", ""),
+                "timestamp": ts,
+                "event_type": "tool_call",
+                "session_id": sid,
+                "agent_name": agent,
+                "summary": f"{tool}() → {status}  |  Security: {sec if sec is not None else 'N/A'}%  Relevance: {rel if rel is not None else 'N/A'}%",
+                "severity": severity,
+                "detail": step.get("reasoning", ""),
+            })
+
+        # Issue events
+        for issue in session.get("issues", []):
+            if isinstance(issue, dict):
+                sev_num = issue.get("severity", 5)
+                severity = "critical" if sev_num >= 8 else ("warning" if sev_num >= 5 else "info")
+                events.append({
+                    "id": issue.get("issue_id", ""),
+                    "timestamp": issue.get("timestamp", start_time),
+                    "event_type": "issue",
+                    "session_id": sid,
+                    "agent_name": agent,
+                    "summary": f"[{issue.get('issue_type', 'UNKNOWN')}] {issue.get('description', '')}",
+                    "severity": severity,
+                    "detail": issue.get("recommendation", ""),
+                })
+
+        # Session end event
+        end_time = session.get("ended_at") or session.get("end_time")
+        if end_time:
+            quality = session.get("overall_quality", "GOOD")
+            severity = "info" if quality in ("EXCELLENT", "GOOD") else ("warning" if quality == "POOR" else "critical")
+            events.append({
+                "id": f"{sid}-end",
+                "timestamp": end_time,
+                "event_type": "session_end",
+                "session_id": sid,
+                "agent_name": agent,
+                "summary": f"Session ended – Quality: {quality}, Efficiency: {session.get('efficiency_score', 0)}%, Security: {session.get('security_score', 'N/A')}{'%' if session.get('security_score') is not None else ''}",
+                "severity": severity,
+            })
+
+    # Sort all events by timestamp descending
+    events.sort(key=lambda e: e.get("timestamp", ""), reverse=True)
+    return events[:limit]
+
+
+@app.get("/api/stats", dependencies=[Depends(verify_api_key)])
+def get_stats() -> Dict[str, Any]:
+    """Get dashboard statistics"""
+    sessions = get_sessions()
+    agents = get_agents()
+    
+    if not sessions:
+        return {
+            "total_sessions": 0,
+            "active_sessions": 0,
+            "critical_threats": 0,
+            "avg_efficiency": 0,
+            "avg_security": 100,
+            "total_agents": len(agents)
+        }
+    
+    quality_map = {"EXCELLENT": 100, "GOOD": 75, "POOR": 50, "FAILED": 25, "STUCK": 0}
+    
+    return {
+        "total_sessions": len(sessions),
+        "active_sessions": sum(1 for s in sessions if s.get("status") == "active"),
+        "critical_threats": sum(1 for s in sessions if (s.get("security_score") or 100) < 70),
+        "avg_efficiency": sum(s.get("efficiency_score") or 0 for s in sessions) / len(sessions),
+        "avg_security": sum(s.get("security_score") or 100 for s in sessions) / len(sessions),
+        "total_agents": len(agents)
+    }
+
+
+@app.get("/api/config", dependencies=[Depends(verify_api_key)])
+def get_config() -> Dict[str, Any]:
+    """Get current PhantomGuard configuration"""
+    config = _load_config()
+
+    # Add runtime info
+    sessions_count = len(list(SESSIONS_DIR.glob("*.json"))) if SESSIONS_DIR.exists() else 0
+    agents_count = 0
+    if REGISTRY_FILE.exists():
+        try:
+            with open(REGISTRY_FILE) as f:
+                agents_count = len(json.load(f))
+        except Exception:
+            pass
+
+    steps_files = list((LOGS_DIR / "steps").glob("*.jsonl")) if (LOGS_DIR / "steps").exists() else []
+    issues_files = list((LOGS_DIR / "issues").glob("*.json")) if (LOGS_DIR / "issues").exists() else []
+
+    config["_runtime"] = {
+        "api_version": "1.0.0",
+        "log_directory": str(LOGS_DIR.resolve()),
+        "sessions_directory": str(SESSIONS_DIR.resolve()),
+        "total_session_files": sessions_count,
+        "total_agent_files": agents_count,
+        "total_step_log_files": len(steps_files),
+        "total_issue_files": len(issues_files),
+        "config_file": str(CONFIG_FILE.resolve()),
+        "config_exists": CONFIG_FILE.exists(),
+    }
+
+    return config
+
+
+@app.put("/api/config", dependencies=[Depends(verify_api_key)])
+def update_config(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Update PhantomGuard configuration"""
+    config = _load_config()
+
+    allowed_keys = set(DEFAULT_CONFIG.keys())
+    updated = []
+    for key, value in data.items():
+        if key in allowed_keys:
+            config[key] = value
+            updated.append(key)
+
+    if not updated:
+        raise HTTPException(status_code=400, detail="No valid config keys provided")
+
+    _save_config(config)
+    return {"status": "updated", "updated_keys": updated, "config": config}
+
+
+@app.websocket("/ws/sessions")
+async def websocket_sessions(websocket: WebSocket):
+    """WebSocket endpoint for real-time session updates"""
+    await manager.connect(websocket)
+
+    try:
+        # Send initial data
+        sessions = get_sessions()
+        agents = get_agents()
+        await websocket.send_json({
+            "type": "initial",
+            "sessions": sessions,
+            "agents": agents
+        })
+
+        # Keep connection alive and send periodic updates
+        import time as _time
+        last_update = _time.time()
+
+        while True:
+            try:
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=2.0)
+                if data == "ping":
+                    await websocket.send_json({"type": "pong"})
+            except asyncio.TimeoutError:
+                pass
+
+            # Send updates every 5 seconds regardless of ping/pong
+            now = _time.time()
+            if now - last_update >= 5.0:
+                last_update = now
+                sessions = get_sessions()
+                agents = get_agents()
+                await websocket.send_json({
+                    "type": "update",
+                    "sessions": sessions,
+                    "agents": agents
+                })
+
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+        manager.disconnect(websocket)
+
+
+async def notify_session_update(session_id: str):
+    """Notify all connected clients about a session update"""
+    try:
+        session = get_session(session_id)
+        await manager.broadcast({
+            "type": "session_update",
+            "session": session
+        })
+    except Exception as e:
+        logger.warning(f"Failed to notify WebSocket clients for session {session_id}: {e}")
+
+
+# ── Hook Agent Endpoints ────────────────────────────────
+
+@app.post("/api/agents/register")
+def register_hook_agent(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Register a hook agent (idempotent — returns existing if name matches)."""
+    name = data.get("name", "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+
+    REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    agents: List[Dict[str, Any]] = []
+    if REGISTRY_FILE.exists():
+        try:
+            with open(REGISTRY_FILE) as f:
+                agents = json.load(f)
+        except Exception:
+            agents = []
+
+    # Return existing hook agent with this name
+    for agent in agents:
+        if agent.get("name") == name and agent.get("source") == "hook":
+            return agent
+
+    # Create new hook agent entry
+    agent_id = f"hook-{datetime.now().strftime('%Y%m%d%H%M%S')}-{name.lower().replace(' ', '_')[:20]}"
+    agent_info: Dict[str, Any] = {
+        "id": agent_id,
+        "name": name,
+        "source": "hook",
+        "source_file": data.get("source_file", "unknown.py"),
+        "task_description": data.get("task_description", f"Live monitoring: {name}"),
+        "added_at": datetime.now().isoformat(),
+        "status": "analyzed",
+        "discovery": {
+            "agent_type": "Hook Agent",
+            "tools": [],
+            "functions": [],
+            "imports": [],
+            "dependencies": [],
+            "potential_issues": [],
+            "entry_points": [],
+        },
+    }
+
+    agents.append(agent_info)
+    with open(REGISTRY_FILE, "w") as f:
+        json.dump(agents, f, indent=2)
+
+    logger.info("Hook agent registered: %s (%s)", name, agent_id)
+    return agent_info
+
+
+@app.post("/api/sessions/ingest")
+def ingest_session(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Create a new session or resume an existing one (by session_id)."""
+    session_id = data.get("session_id", "")
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id is required")
+
+    SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+    session_file = SESSIONS_DIR / f"{session_id}.json"
+
+    # Resume existing session
+    if session_file.exists():
+        try:
+            with open(session_file) as f:
+                existing = json.load(f)
+            existing["status"] = "active"
+            existing["ended_at"] = None
+            if data.get("task") and not existing.get("task"):
+                existing["task"] = data["task"]
+            with open(session_file, "w") as f:
+                json.dump(existing, f, indent=2)
+            logger.info("Session resumed: %s (%d existing steps)", session_id, len(existing.get("steps", [])))
+            return existing
+        except Exception as e:
+            logger.warning("Failed to resume session %s: %s", session_id, e)
+
+    # Create new session
+    session_data: Dict[str, Any] = {
+        "session_id": session_id,
+        "agent_id": data.get("agent_id", ""),
+        "agent_name": data.get("agent_name", "Unknown"),
+        "model": data.get("model"),
+        "task": data.get("task", ""),
+        "started_at": data.get("started_at", datetime.now().isoformat()),
+        "ended_at": None,
+        "status": "active",
+        "total_steps": 0,
+        "steps": [],
+        "issues": [],
+        "overall_quality": "PENDING",
+        "efficiency_score": None,
+        "security_score": None,
+        "task_completion": None,
+        "completion_confidence": None,
+        "loop_detected": False,
+        "security_breach_detected": False,
+        "total_execution_time_ms": 0,
+        "ai_evaluation": "",
+        "recommendations": [],
+        "tool_analysis": [],
+        "decision_observations": [],
+        "efficiency_explanation": "",
+    }
+
+    with open(session_file, "w") as f:
+        json.dump(session_data, f, indent=2)
+
+    logger.info("Session created: %s", session_id)
+    return session_data
+
+
+@app.post("/api/sessions/{session_id}/step")
+async def add_session_step(session_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """Add a step to a session in real-time."""
+    session_file = SESSIONS_DIR / f"{session_id}.json"
+    if not session_file.exists():
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    try:
+        with open(session_file) as f:
+            session = json.load(f)
+
+        # Append new step
+        session.setdefault("steps", []).append(data)
+        session["total_steps"] = len(session["steps"])
+        session["status"] = "active"
+
+        with open(session_file, "w") as f:
+            json.dump(session, f, indent=2)
+
+        # Broadcast to WebSocket clients
+        try:
+            await manager.broadcast({
+                "type": "session_update",
+                "session": normalize_session(session),
+            })
+        except Exception:
+            pass
+
+        return {"status": "ok", "total_steps": session["total_steps"]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/sessions/{session_id}/complete")
+async def complete_session(session_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """Mark session as complete and update scores. Preserves existing steps."""
+    session_file = SESSIONS_DIR / f"{session_id}.json"
+    if not session_file.exists():
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    try:
+        with open(session_file) as f:
+            session = json.load(f)
+
+        # Preserve existing steps
+        existing_steps = session.get("steps", [])
+
+        # Update with completion data
+        session.update(data)
+
+        # Restore steps if payload didn't include them
+        if not data.get("steps"):
+            session["steps"] = existing_steps
+            session["total_steps"] = len(existing_steps)
+
+        session["status"] = data.get("status", "completed")
+
+        with open(session_file, "w") as f:
+            json.dump(session, f, indent=2)
+
+        # Broadcast to WebSocket clients
+        try:
+            await manager.broadcast({
+                "type": "session_update",
+                "session": normalize_session(session),
+            })
+        except Exception:
+            pass
+
+        return {"status": "ok", "session_id": session_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/sessions/{session_id}", dependencies=[Depends(verify_api_key)])
+def delete_session(session_id: str) -> Dict[str, str]:
+    """Delete a session. Does not affect the agent registry."""
+    session_file = SESSIONS_DIR / f"{session_id}.json"
+    if not session_file.exists():
+        raise HTTPException(status_code=404, detail="Session not found")
+    try:
+        session_file.unlink()
+        return {"status": "deleted", "id": session_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
+
+# PhantomGuard logs and runtime data (generated at runtime)
+phantomguard_logs/*
+!phantomguard_logs/.gitkeep
+!phantomguard_logs/*/
+!phantomguard_logs/*/.gitkeep
+
+# Runtime-generated files
+agents_registry.json
+config.json
+session/
+slack_events/
+
+# Temp/test output files
+*.txt
+!README*.txt
+
+# Demo outputs
+demo_output/
+
+# REPL state
+repl_state/
+
+# Trader files (external project)
+trader.py
+thinker.py
+trade_memory.py
+data_manager.py
+config.py
+executor.py
+market_analyzer.py
+create_trader_session_log.py
+run_trader_with_phantomguard.py
+test_trader_simple.py
+TRADER_*.md
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage

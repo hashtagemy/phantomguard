@@ -1,0 +1,86 @@
+# pyproject.toml
+
+[project]
+name = "phantomguard"
+version = "0.2.0"
+description = "AI Agent Quality & Security Monitoring Platform - Real-time task execution tracking, loop detection, and threat prevention for Strands agents using Amazon Nova"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+authors = [
+    { name = "Emine Hanedar", email = "hanedar.e@gmail.com" }
+]
+keywords = [
+    "ai-agents",
+    "agent-monitoring",
+    "quality-assurance",
+    "security",
+    "strands",
+    "amazon-nova",
+    "bedrock",
+    "llm-observability",
+    "agent-testing"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "strands-agents>=1.23.0",
+    "pydantic>=2.0.0",
+    "boto3>=1.35.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/hashtagemy/phantomguard"
+Documentation = "https://github.com/hashtagemy/phantomguard#readme"
+Repository = "https://github.com/hashtagemy/phantomguard"
+Issues = "https://github.com/hashtagemy/phantomguard/issues"
+
+[project.optional-dependencies]
+api = [
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "websockets>=12.0",
+    "python-multipart>=0.0.9",
+]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.8.0",
+    "requests>=2.31.0",
+]
+all = [
+    "phantomguard[api,dev]",
+]
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["phantomguard*"]
+exclude = ["tests*", "demo*", "examples*"]
+
+[tool.setuptools.package-data]
+phantomguard = ["py.typed"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
