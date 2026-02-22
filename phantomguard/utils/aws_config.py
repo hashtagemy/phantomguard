@@ -108,7 +108,7 @@ def test_bedrock_connection() -> bool:
         client = get_bedrock_client()
         # Try a simple converse call as a connection test
         response = client.converse(
-            modelId="amazon.nova-2-lite-v1:0",
+            modelId="us.amazon.nova-2-lite-v1:0",
             messages=[
                 {
                     "role": "user",

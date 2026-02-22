@@ -34,8 +34,8 @@ class QualityEvaluator:
     
     def __init__(
         self, 
-        model_id: str = "amazon.nova-2-lite-v1:0",
-        fast_model_id: str = "amazon.nova-2-lite-v1:0",
+        model_id: str = "us.amazon.nova-2-lite-v1:0",
+        fast_model_id: str = "us.amazon.nova-2-lite-v1:0",
         temperature: float = 0.1
     ):
         """

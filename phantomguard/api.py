@@ -573,7 +573,7 @@ STRICT RULES:
 Respond with ONLY valid JSON. No markdown fences, no explanation."""
 
         model = BedrockModel(
-            model_id="amazon.nova-2-lite-v1:0",
+            model_id="us.amazon.nova-2-lite-v1:0",
             temperature=0.2,
         )
         task_agent = StrandsAgent(

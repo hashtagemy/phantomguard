@@ -418,7 +418,6 @@ export const AddAgent: React.FC<AddAgentProps> = ({ onAgentAdded }) => {
               </div>
 
               <div className="text-xs text-gray-500 flex items-center justify-center gap-4">
-                <span className="flex items-center gap-1"><CheckCircle2 size={12} /> max 50MB</span>
                 <span className="flex items-center gap-1"><CheckCircle2 size={12} /> .zip format</span>
                 <span className="flex items-center gap-1"><CheckCircle2 size={12} /> secure scan</span>
               </div>
