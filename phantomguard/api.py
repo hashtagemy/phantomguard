@@ -1334,6 +1334,9 @@ def _execute_agent_background(agent_id: str, session_id: str, agent_path: str, m
             logger.info(f"Loading as package: {module_name} from {package_root}")
             if package_root not in sys.path:
                 sys.path.insert(0, package_root)
+            # Also add the agent's own directory so local siblings (utils/, tools/, etc.) are importable
+            if str(agent_path) not in sys.path:
+                sys.path.insert(0, str(agent_path))
             try:
                 agent_module = importlib.import_module(module_name)
             except ImportError as e:
