@@ -170,9 +170,13 @@ class PhantomGuardHook(HookProvider):
             task=self.task,
         )
 
-        # Sabit session ID varsa kullan
+        # Sabit session ID varsa kullan; yoksa dışarıdan verilmiş session_id'yi tercih et
         if fixed_session_id:
             self._session_report.session_id = fixed_session_id
+        elif self.session_id:
+            # _execute_agent_background() tarafından verilen git-* session_id'yi kullan
+            # → ingest endpoint zaten bu ID ile bir dosya oluşturmuş, üstüne yazmak yerine onu devam ettiririz
+            self._session_report.session_id = self.session_id
 
         logger.info(f"Session started: {self._agent_name}")
 
@@ -446,12 +450,21 @@ class PhantomGuardHook(HookProvider):
 
             # Config eksikliği tespiti (tool sonucunda eksik env var hataları)
             _CONFIG_ERROR_PATTERNS = [
+                # Knowledge base
                 ("no knowledge base id",          "STRANDS_KNOWLEDGE_BASE_ID env var tanımlı değil"),
                 ("no kb id",                       "STRANDS_KNOWLEDGE_BASE_ID env var tanımlı değil"),
                 ("knowledge base id not provided", "STRANDS_KNOWLEDGE_BASE_ID env var tanımlı değil"),
+                # Generic missing config
                 ("api key not found",              "API anahtarı eksik — ilgili env var kontrol edilmeli"),
                 ("credentials not configured",     "AWS/servis kimlik bilgileri yapılandırılmamış"),
                 ("missing environment variable",   "Zorunlu bir env var tanımlı değil"),
+                # Exchange / CCXT auth hataları
+                ("authenticationerror",            "Exchange API kimlik doğrulama hatası — API anahtarı geçersiz veya süresi dolmuş"),
+                ("api key expired",                "API anahtarı süresi dolmuş — exchange panelinden yenilenmeli"),
+                ("retcode: 33004",                 "Bybit API key authorization hatası (33004) — API anahtarı yetkilendirilmemiş"),
+                ("invalid api-key",                "API anahtarı geçersiz — doğru key girildiğinden emin ol"),
+                ("authentication failed",          "Exchange kimlik doğrulama başarısız — API key/secret kontrol et"),
+                ("invalid credentials",            "Exchange kimlik bilgileri geçersiz"),
             ]
             result_lower = (full_result or "").lower()
             for _pattern, _hint in _CONFIG_ERROR_PATTERNS:
