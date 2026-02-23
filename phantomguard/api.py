@@ -483,7 +483,7 @@ def _discover_and_install_deps(agent_path: Path, main_file: str) -> Dict[str, An
     return info
 
 
-def _generate_auto_task(agent_name: str, discovery: Dict[str, Any], task_description: str) -> str:
+def _generate_auto_task(agent_name: str, discovery: Dict[str, Any], task_description: str, clone_path: Optional[Path] = None) -> str:
     """Generate a structured, tool-aware test task based on agent's capabilities."""
     try:
         import json as _json
@@ -493,6 +493,62 @@ def _generate_auto_task(agent_name: str, discovery: Dict[str, Any], task_descrip
         tools = discovery.get("tools", [])
         agent_type = discovery.get("agent_type", "unknown")
         system_prompt = discovery.get("system_prompt", "")
+
+        # --- Enrich context from repo files ---
+        readme_content = ""
+        pyproject_description = ""
+        tool_file_summaries = ""
+
+        if clone_path and clone_path.exists():
+            # Read README.md for agent purpose
+            for readme_name in ("README.md", "readme.md", "README.rst", "README.txt"):
+                readme_path = clone_path / readme_name
+                if readme_path.exists():
+                    try:
+                        readme_content = readme_path.read_text(encoding="utf-8", errors="ignore")[:2000]
+                    except Exception:
+                        pass
+                    break
+
+            # Read pyproject.toml description
+            pyproject_path = clone_path / "pyproject.toml"
+            if pyproject_path.exists():
+                try:
+                    try:
+                        import tomllib as _tomllib
+                    except ImportError:
+                        import tomli as _tomllib  # type: ignore
+                    with open(pyproject_path, "rb") as _f:
+                        _pdata = _tomllib.load(_f)
+                    pyproject_description = _pdata.get("project", {}).get("description", "")
+                except Exception:
+                    pass
+
+            # Collect tool docstrings from tool files (tools/ directory)
+            tool_summaries = []
+            for tools_dir in (clone_path / "tools", clone_path / "src"):
+                if tools_dir.exists():
+                    for py_file in sorted(tools_dir.rglob("*.py"))[:10]:
+                        if py_file.name == "__init__.py":
+                            continue
+                        try:
+                            import ast as _ast
+                            content = py_file.read_text(encoding="utf-8", errors="ignore")
+                            tree = _ast.parse(content)
+                            for node in _ast.walk(tree):
+                                if isinstance(node, _ast.FunctionDef):
+                                    has_tool = any(
+                                        (isinstance(d, _ast.Name) and d.id == "tool") or
+                                        (isinstance(d, _ast.Attribute) and d.attr == "tool")
+                                        for d in node.decorator_list
+                                    )
+                                    if has_tool:
+                                        docstring = _ast.get_docstring(node) or ""
+                                        tool_summaries.append(f"- {node.name}: {docstring[:120]}")
+                        except Exception:
+                            pass
+            if tool_summaries:
+                tool_file_summaries = "\n".join(tool_summaries[:20])
 
         # Deduplicate tools by name (discovery sometimes returns external + local duplicates)
         seen = set()
@@ -542,33 +598,53 @@ def _generate_auto_task(agent_name: str, discovery: Dict[str, Any], task_descrip
         else:
             strategy = "Perform a reasoning or analysis task appropriate to the agent's described purpose."
 
-        prompt = f"""You are a QA engineer creating a test task for an AI agent.
+        # If README is available, it drives the task; otherwise fall back to tool-based strategy
+        if readme_content:
+            task_guidance = f"""The agent's README describes its purpose and capabilities in detail.
+Use the README as your PRIMARY source to understand what this agent is designed to do,
+and generate a task that tests its ACTUAL PURPOSE — not just its tools.
+Do NOT default to fetching example.com unless it genuinely fits the agent's purpose."""
+        else:
+            task_guidance = f"Suggested test strategy (based on detected tools): {strategy}"
 
-Agent name: {agent_name}
-Agent type: {agent_type}
-System prompt excerpt: {system_prompt[:400] if system_prompt else 'N/A'}
+        prompt = f"""You are a QA engineer creating a meaningful, agent-specific test task.
 
-Available tools:
+=== AGENT IDENTITY ===
+Name: {agent_name}
+Type: {agent_type}
+Description: {pyproject_description if pyproject_description else 'N/A'}
+
+=== README (primary source — read carefully) ===
+{readme_content[:2000] if readme_content else 'N/A'}
+
+=== SYSTEM PROMPT (if available) ===
+{system_prompt[:400] if system_prompt else 'N/A'}
+
+=== AVAILABLE TOOLS ===
+From main file:
 {tool_details}
 
-Detected capability categories: {', '.join(categories) if categories else 'none'}
-Suggested test strategy: {strategy}
+From tool files:
+{tool_file_summaries if tool_file_summaries else 'N/A'}
+
+=== TASK GUIDANCE ===
+{task_guidance}
 
 Generate a test task as a JSON object with exactly these fields:
 {{
-  "description": "The task text (imperative sentences, max 120 words)",
+  "description": "The task text — specific, meaningful, reflects the agent's actual purpose (max 150 words)",
   "expected_tools": ["tool1", "tool2"],
-  "max_steps": 10,
-  "success_criteria": "One sentence: what does successful completion look like?"
+  "max_steps": 15,
+  "success_criteria": "One sentence describing what successful completion looks like"
 }}
 
-STRICT RULES:
-1. Use only tool names from the available tools list above in expected_tools
-2. NEVER reference local files that don't already exist — if using file tools, the task must CREATE the file first
-3. For web tools: use https://example.com or https://httpbin.org/get (always-available URLs)
-4. For shell tools: only safe read-only commands (echo, date, pwd, ls /tmp)
-5. Task must be completable within 2 minutes
-6. Task must produce observable, verifiable output
+RULES:
+1. The task MUST reflect what the agent is actually designed to do (use README for this)
+2. Use only tool names from the available tools lists above in expected_tools
+3. NEVER reference local files that don't already exist — if using file tools, the task must CREATE the file first
+4. Task must be completable autonomously within 2-3 minutes
+5. Task must produce observable, verifiable output
+6. Be specific — mention real topics, real actions, real expected outcomes
 
 Respond with ONLY valid JSON. No markdown fences, no explanation."""
 
@@ -613,12 +689,66 @@ Respond with ONLY valid JSON. No markdown fences, no explanation."""
         return task_description
 
 
+def _find_main_file_from_pyproject(clone_path: Path) -> Optional[Path]:
+    """Parse pyproject.toml to find the main agent file. Returns absolute path or None."""
+    pyproject = clone_path / "pyproject.toml"
+    if not pyproject.exists():
+        return None
+    try:
+        try:
+            import tomllib
+        except ImportError:
+            try:
+                import tomli as tomllib  # type: ignore
+            except ImportError:
+                return None
+        with open(pyproject, "rb") as f:
+            data = tomllib.load(f)
+
+        # Priority 1: [project.scripts] → "module.submodule:function"
+        scripts = data.get("project", {}).get("scripts", {})
+        for _cmd, entry in scripts.items():
+            module_part = entry.split(":")[0]  # e.g. "strands_research_agent.agent"
+            parts = module_part.split(".")
+            # Try src/ layout first, then flat
+            for src_prefix in [clone_path / "src", clone_path]:
+                candidate = src_prefix.joinpath(*parts).with_suffix(".py")
+                if candidate.exists():
+                    return candidate
+
+        # Priority 2: [tool.hatch.build.targets.wheel] packages = ["src/pkg"]
+        hatch_pkgs = (data.get("tool", {}).get("hatch", {})
+                      .get("build", {}).get("targets", {})
+                      .get("wheel", {}).get("packages", []))
+        for pkg_path in hatch_pkgs:
+            pkg_dir = clone_path / pkg_path
+            for name in ("agent.py", "main.py", "app.py"):
+                candidate = pkg_dir / name
+                if candidate.exists():
+                    return candidate
+
+        # Priority 3: [tool.setuptools.packages.find] where = ["src"]
+        where_list = (data.get("tool", {}).get("setuptools", {})
+                      .get("packages", {}).get("find", {}).get("where", []))
+        for where in where_list:
+            for sub in (clone_path / where).iterdir() if (clone_path / where).exists() else []:
+                if sub.is_dir():
+                    for name in ("agent.py", "main.py", "app.py"):
+                        candidate = sub / name
+                        if candidate.exists():
+                            return candidate
+
+    except Exception as e:
+        logger.warning(f"pyproject.toml parse failed: {e}")
+    return None
+
+
 _SKIP_FILENAMES = frozenset({
     "__init__.py", "setup.py", "conftest.py", "constants.py",
     "config.py", "utils.py", "helpers.py", "test.py", "tests.py",
 })
 _AGENT_IMPORTS = frozenset({
-    "strands", "langchain", "crewai", "autogpt", "anthropic", "openai",
+    "strands", "strands_tools", "langchain", "crewai", "autogpt", "anthropic", "openai",
 })
 
 
@@ -681,7 +811,25 @@ def _derive_agent_name(file_path: Path, prefix: str = "") -> str:
     """Derive a human-readable agent name from a Python file."""
     import ast as _ast
 
-    # Try module-level docstring first
+    # Priority 1: pyproject.toml [project] name in parent directories
+    for parent in [file_path.parent, file_path.parent.parent, file_path.parent.parent.parent]:
+        pyproject = parent / "pyproject.toml"
+        if pyproject.exists():
+            try:
+                try:
+                    import tomllib as _tl
+                except ImportError:
+                    import tomli as _tl  # type: ignore
+                with open(pyproject, "rb") as _f:
+                    _pd = _tl.load(_f)
+                name = _pd.get("project", {}).get("name", "")
+                if name:
+                    friendly = name.replace("-", " ").replace("_", " ").title()
+                    return f"{prefix} {friendly}".strip() if prefix else friendly
+            except Exception:
+                pass
+
+    # Priority 2: module-level docstring
     try:
         content = file_path.read_text(encoding="utf-8", errors="ignore")
         tree = _ast.parse(content)
@@ -773,12 +921,18 @@ def import_github_agent(data: Dict[str, Any]) -> List[Dict[str, Any]]:
             # User pinned a specific file — single-agent mode
             candidate_files = [clone_path / explicit_main_file]
         else:
-            # Scan for all agent files (max 2 levels deep)
-            candidate_files = sorted([
-                p for p in clone_path.rglob("*.py")
-                if len(p.relative_to(clone_path).parts) <= 2
-                and _is_agent_file(p)
-            ], key=lambda p: p.name)
+            # If clone_path has a pyproject.toml → single package → single card
+            pyproject_main = _find_main_file_from_pyproject(clone_path)
+            if pyproject_main is not None:
+                logger.info(f"pyproject.toml detected single-package agent: {pyproject_main}")
+                candidate_files = [pyproject_main]
+            else:
+                # Scan for all agent files (max 4 levels deep)
+                candidate_files = sorted([
+                    p for p in clone_path.rglob("*.py")
+                    if len(p.relative_to(clone_path).parts) <= 4
+                    and _is_agent_file(p)
+                ], key=lambda p: p.name)
 
         if not candidate_files:
             available = [f.name for f in clone_path.rglob("*.py") if f.name != "__init__.py"]
@@ -840,7 +994,7 @@ def import_github_agent(data: Dict[str, Any]) -> List[Dict[str, Any]]:
             agent_info["status"] = discovery_info.get("status", "ready")
             if "discovery" in discovery_info:
                 agent_info["discovery"] = discovery_info["discovery"]
-                auto_task = _generate_auto_task(agent_name, discovery_info["discovery"], task_description)
+                auto_task = _generate_auto_task(agent_name, discovery_info["discovery"], task_description, clone_path)
                 agent_info["task_description"] = auto_task
 
             agents_list.append(agent_info)
@@ -930,7 +1084,7 @@ async def import_zip_agent(file: UploadFile = File(...), agent_name: str = Form(
         if "discovery" in discovery_info:
             agent_info["discovery"] = discovery_info["discovery"]
             # Generate auto-task based on discovered capabilities
-            auto_task = _generate_auto_task(agent_name, discovery_info["discovery"], task_description)
+            auto_task = _generate_auto_task(agent_name, discovery_info["discovery"], task_description, extract_path)
             agent_info["task_description"] = auto_task
 
         # Save to registry
@@ -1135,28 +1289,32 @@ def _execute_agent_background(agent_id: str, session_id: str, agent_path: str, m
         agent_path_obj = Path(agent_path)
         repo_root_obj = Path(repo_root) if repo_root else agent_path_obj
 
+        agent_pyproject_file = agent_path_obj / "pyproject.toml"
         pyproject_file = repo_root_obj / "pyproject.toml"
         req_file = repo_root_obj / "requirements.txt"
         agent_req_file = agent_path_obj / "requirements.txt"
 
-        if pyproject_file.exists():
+        pip_base = [sys.executable, "-m", "pip", "install", "-q", "--break-system-packages"]
+
+        def _run_pip(args: list, label: str) -> None:
+            result = subprocess.run(pip_base + args, capture_output=True, text=True, timeout=120)
+            if result.returncode != 0:
+                logger.warning(f"pip install failed ({label}): {result.stderr[:500]}")
+            else:
+                logger.info(f"pip install succeeded ({label})")
+
+        if agent_pyproject_file.exists():
+            logger.info(f"Installing agent package from {agent_path_obj}")
+            _run_pip(["-e", str(agent_path_obj)], str(agent_pyproject_file))
+        elif pyproject_file.exists():
             logger.info(f"Installing agent package from {repo_root_obj}")
-            subprocess.run(
-                [sys.executable, "-m", "pip", "install", "-e", str(repo_root_obj), "-q"],
-                capture_output=True, text=True, timeout=120
-            )
+            _run_pip(["-e", str(repo_root_obj)], str(pyproject_file))
         elif req_file.exists():
             logger.info(f"Installing agent requirements from {req_file}")
-            subprocess.run(
-                [sys.executable, "-m", "pip", "install", "-r", str(req_file), "-q"],
-                capture_output=True, text=True, timeout=120
-            )
+            _run_pip(["-r", str(req_file)], str(req_file))
         elif agent_req_file.exists() and str(agent_req_file) != str(req_file):
             logger.info(f"Installing agent requirements from {agent_req_file}")
-            subprocess.run(
-                [sys.executable, "-m", "pip", "install", "-r", str(agent_req_file), "-q"],
-                capture_output=True, text=True, timeout=120
-            )
+            _run_pip(["-r", str(agent_req_file)], str(agent_req_file))
 
         # Disable prompt caching to avoid Bedrock ValidationException
         # ("There is nothing available to cache") when system prompt is short
@@ -1180,11 +1338,9 @@ def _execute_agent_background(agent_id: str, session_id: str, agent_path: str, m
                 agent_module = importlib.import_module(module_name)
             except ImportError as e:
                 logger.warning(f"Package import failed ({e}), trying pip install...")
-                if pyproject_file.exists():
-                    subprocess.run(
-                        [sys.executable, "-m", "pip", "install", "-e", str(repo_root_obj), "-q"],
-                        capture_output=True, text=True, timeout=120
-                    )
+                install_target = agent_pyproject_file if agent_pyproject_file.exists() else (repo_root_obj if pyproject_file.exists() else None)
+                if install_target:
+                    _run_pip(["-e", str(install_target.parent if install_target == agent_pyproject_file else install_target)], "retry")
                     agent_module = importlib.import_module(module_name)
                 else:
                     raise
@@ -1236,6 +1392,16 @@ def _execute_agent_background(agent_id: str, session_id: str, agent_path: str, m
                     func = getattr(agent_module, attr_name, None)
                     if callable(func):
                         try:
+                            import inspect as _inspect
+                            sig = _inspect.signature(func)
+                            required = [
+                                p for p in sig.parameters.values()
+                                if p.default is _inspect.Parameter.empty
+                                and p.kind not in (p.VAR_POSITIONAL, p.VAR_KEYWORD)
+                            ]
+                            if required:
+                                logger.info(f"Skipping factory {attr_name}(): requires args {[p.name for p in required]}")
+                                continue
                             logger.info(f"Calling factory function: {attr_name}()")
                             result_obj = func()
 
