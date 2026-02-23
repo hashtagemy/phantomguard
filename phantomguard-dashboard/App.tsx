@@ -87,6 +87,13 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Refresh session data whenever a specific agent card is opened
+  useEffect(() => {
+    if (selectedAgentId) {
+      loadSessions();
+    }
+  }, [selectedAgentId]);
+
   const loadSessions = async () => {
     try {
       const data = await api.getSessions();
