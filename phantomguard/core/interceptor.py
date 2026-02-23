@@ -154,7 +154,7 @@ class PhantomGuardHook(HookProvider):
         elif hasattr(agent, "model"):
             model_name = str(agent.model) if agent.model else None
 
-        # Sabit session ID (hook agent için her çalıştırmada aynı)
+        # Fixed session ID (same across runs for hook agents)
         if self._phantomguard_url and self._external_agent_name:
             slug = "".join(
                 c if c.isalnum() or c == "_" else "_"
@@ -170,12 +170,12 @@ class PhantomGuardHook(HookProvider):
             task=self.task,
         )
 
-        # Sabit session ID varsa kullan; yoksa dışarıdan verilmiş session_id'yi tercih et
+        # Apply session ID: fixed slug takes priority, then caller-provided ID
         if fixed_session_id:
             self._session_report.session_id = fixed_session_id
         elif self.session_id:
-            # _execute_agent_background() tarafından verilen git-* session_id'yi kullan
-            # → ingest endpoint zaten bu ID ile bir dosya oluşturmuş, üstüne yazmak yerine onu devam ettiririz
+            # Use the git-* session_id provided by _execute_agent_background()
+            # so the hook resumes the file already created by the run endpoint
             self._session_report.session_id = self.session_id
 
         logger.info(f"Session started: {self._agent_name}")
@@ -185,7 +185,7 @@ class PhantomGuardHook(HookProvider):
             self._dashboard_on_session_start()
 
     def _on_message_added(self, event: MessageAddedEvent) -> None:
-        """Task'ı ilk user mesajından otomatik set et."""
+        """Auto-set task from the first user message if not already defined."""
         if self.task is not None:
             return
         msg = event.message
@@ -425,7 +425,7 @@ class PhantomGuardHook(HookProvider):
                     recommendation="Agent may be drifting from task objective"
                 ))
             
-            # Check for security issues (eşik <= 50: AI skoru tam 50 verince de tetiklenir)
+            # Check for security issues (threshold <= 50 catches AI scores of exactly 50)
             if security is not None and security <= 50:
                 issue_type = "SUSPICIOUS_BEHAVIOR"
                 if "exfiltration" in reasoning.lower() or "external" in reasoning.lower():
@@ -448,23 +448,23 @@ class PhantomGuardHook(HookProvider):
                 if self._session_report:
                     self._session_report.security_breach_detected = True
 
-            # Config eksikliği tespiti (tool sonucunda eksik env var hataları)
+            # Detect missing config / auth errors from tool result text
             _CONFIG_ERROR_PATTERNS = [
                 # Knowledge base
-                ("no knowledge base id",          "STRANDS_KNOWLEDGE_BASE_ID env var tanımlı değil"),
-                ("no kb id",                       "STRANDS_KNOWLEDGE_BASE_ID env var tanımlı değil"),
-                ("knowledge base id not provided", "STRANDS_KNOWLEDGE_BASE_ID env var tanımlı değil"),
+                ("no knowledge base id",          "STRANDS_KNOWLEDGE_BASE_ID environment variable is not set"),
+                ("no kb id",                       "STRANDS_KNOWLEDGE_BASE_ID environment variable is not set"),
+                ("knowledge base id not provided", "STRANDS_KNOWLEDGE_BASE_ID environment variable is not set"),
                 # Generic missing config
-                ("api key not found",              "API anahtarı eksik — ilgili env var kontrol edilmeli"),
-                ("credentials not configured",     "AWS/servis kimlik bilgileri yapılandırılmamış"),
-                ("missing environment variable",   "Zorunlu bir env var tanımlı değil"),
-                # Exchange / CCXT auth hataları
-                ("authenticationerror",            "Exchange API kimlik doğrulama hatası — API anahtarı geçersiz veya süresi dolmuş"),
-                ("api key expired",                "API anahtarı süresi dolmuş — exchange panelinden yenilenmeli"),
-                ("retcode: 33004",                 "Bybit API key authorization hatası (33004) — API anahtarı yetkilendirilmemiş"),
-                ("invalid api-key",                "API anahtarı geçersiz — doğru key girildiğinden emin ol"),
-                ("authentication failed",          "Exchange kimlik doğrulama başarısız — API key/secret kontrol et"),
-                ("invalid credentials",            "Exchange kimlik bilgileri geçersiz"),
+                ("api key not found",              "API key is missing — check the relevant environment variable"),
+                ("credentials not configured",     "AWS/service credentials are not configured"),
+                ("missing environment variable",   "A required environment variable is not set"),
+                # Exchange / CCXT authentication errors
+                ("authenticationerror",            "Exchange API authentication failed — API key may be invalid or expired"),
+                ("api key expired",                "API key has expired — renew it in the exchange dashboard"),
+                ("retcode: 33004",                 "Bybit API key authorization error (33004) — key is not authorized"),
+                ("invalid api-key",                "Invalid API key — verify the key is correct"),
+                ("authentication failed",          "Exchange authentication failed — check your API key and secret"),
+                ("invalid credentials",            "Invalid exchange credentials"),
             ]
             result_lower = (full_result or "").lower()
             for _pattern, _hint in _CONFIG_ERROR_PATTERNS:
@@ -473,10 +473,10 @@ class PhantomGuardHook(HookProvider):
                         issue_type=IssueType.MISSING_CONFIG,
                         severity=7,
                         description=(
-                            f"Adım {step.step_number} ({step.tool_name}) config hatasıyla başarısız: {_hint}"
+                            f"Step {step.step_number} ({step.tool_name}) failed due to missing configuration: {_hint}"
                         ),
                         affected_steps=[step.step_id],
-                        recommendation=f"Eksik yapılandırmayı düzeltin. Hata içeriği: '{_pattern}'"
+                        recommendation=f"Fix the missing configuration. Matched pattern: '{_pattern}'"
                     ))
                     break
         

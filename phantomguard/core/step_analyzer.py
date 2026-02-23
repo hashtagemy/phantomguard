@@ -55,8 +55,8 @@ class StepAnalyzer:
         issues = []
         status = StepStatus.SUCCESS
 
-        # 0. Deterministik güvenlik kontrolleri (AI değerlendirmesinden önce)
-        # SSL/TLS bypass tespiti
+        # 0. Deterministic security checks (run before AI evaluation)
+        # SSL/TLS certificate verification bypass detection
         _SSL_BYPASS_KEYS = ("verify_ssl", "verify", "ssl_verify", "check_ssl", "ssl_check")
         for _key in _SSL_BYPASS_KEYS:
             if tool_input.get(_key) is False:
@@ -64,13 +64,13 @@ class StepAnalyzer:
                     issue_type=IssueType.SECURITY_BYPASS,
                     severity=8,
                     description=(
-                        f"'{_key}=False' tespit edildi: SSL sertifika doğrulaması devre dışı bırakıldı. "
-                        "Bu bir MITM (ortadaki adam) saldırısına kapı açar."
+                        f"'{_key}=False' detected: SSL certificate verification is disabled. "
+                        "This exposes the connection to man-in-the-middle (MITM) attacks."
                     ),
                     affected_steps=[f"step_{step_number}"],
                     recommendation=(
-                        f"'{_key}' parametresini kaldırın veya True olarak bırakın. "
-                        "SSL hatası yaşıyorsanız sertifikayı düzgün yükleyin (certifi / CA bundle)."
+                        f"Remove '{_key}' or set it to True. "
+                        "If you are hitting SSL errors, install the proper CA bundle (e.g. certifi)."
                     )
                 ))
                 break
