@@ -703,6 +703,7 @@ def import_github_agent(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Import agent(s) from GitHub repository. Returns a list of discovered agents."""
     repo_url = data.get("repo_url")
     branch = data.get("branch", "main")
+    branch_from_url = False
 
     if not repo_url:
         raise HTTPException(status_code=400, detail="repo_url is required")
@@ -716,15 +717,33 @@ def import_github_agent(data: Dict[str, Any]) -> List[Dict[str, Any]]:
             if len(parts) > 1:
                 path_parts = parts[1].split("/", 1)
                 branch = path_parts[0]
+                branch_from_url = True
                 if len(path_parts) > 1:
                     subfolder = path_parts[1]
             repo_url = f"{base_url}.git"
         elif "github.com" in repo_url and not repo_url.endswith(".git"):
             repo_url = f"{repo_url.rstrip('/')}.git"
 
+        # Detect default branch if not explicitly provided
+        if not branch_from_url and not data.get("branch"):
+            try:
+                ls_result = subprocess.run(
+                    ["git", "ls-remote", "--symref", repo_url, "HEAD"],
+                    capture_output=True, text=True, timeout=15
+                )
+                if ls_result.returncode == 0 and "refs/heads/" in ls_result.stdout:
+                    for line in ls_result.stdout.splitlines():
+                        if line.startswith("ref:"):
+                            branch = line.split("refs/heads/")[1].split()[0]
+                            logger.info(f"Detected default branch: {branch}")
+                            break
+            except Exception:
+                pass
+
         # Clone repository
         temp_dir = Path(tempfile.mkdtemp())
         clone_path = temp_dir / "agent_repo"
+        repo_root = clone_path  # Preserve repo root before subfolder navigation
 
         result = subprocess.run(
             ["git", "clone", "-b", branch, repo_url, str(clone_path)],
@@ -733,8 +752,14 @@ def import_github_agent(data: Dict[str, Any]) -> List[Dict[str, Any]]:
             timeout=60
         )
 
+        # Fallback: if branch not found, clone without -b (uses repo default)
         if result.returncode != 0:
-            raise Exception(f"Git clone failed: {result.stderr}")
+            fallback_result = subprocess.run(
+                ["git", "clone", repo_url, str(clone_path)],
+                capture_output=True, text=True, timeout=60
+            )
+            if fallback_result.returncode != 0:
+                raise Exception(f"Git clone failed: {result.stderr}")
 
         # Handle subfolder
         if subfolder:
@@ -807,6 +832,7 @@ def import_github_agent(data: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "main_file": rel_main,
                 "task_description": task_description,
                 "clone_path": str(clone_path),
+                "repo_root": str(repo_root),
                 "added_at": now.isoformat(),
                 "status": "analyzing",
             }
@@ -893,6 +919,7 @@ async def import_zip_agent(file: UploadFile = File(...), agent_name: str = Form(
             "main_file": main_file,
             "task_description": task_description,
             "extract_path": str(extract_path),
+            "repo_root": str(extract_path),
             "added_at": datetime.now().isoformat(),
             "status": "analyzing"
         }
@@ -992,7 +1019,8 @@ def run_agent(agent_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         import threading
         thread = threading.Thread(
             target=_execute_agent_background,
-            args=(agent_id, session_id, str(agent_path), agent["main_file"], task),
+            args=(agent_id, session_id, str(agent_path), agent["main_file"], task,
+                  agent.get("repo_root", str(agent_path))),
             daemon=True
         )
         thread.start()
@@ -1010,7 +1038,65 @@ def run_agent(agent_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def _execute_agent_background(agent_id: str, session_id: str, agent_path: str, main_file: str, task: str):
+def _detect_package_info(agent_path: str, main_file: str, repo_root: str = None):
+    """Detect if the agent file is inside a Python package.
+
+    Returns (package_root, module_name, is_package) tuple.
+
+    Examples:
+      agent_path="/tmp/repo/server", main_file="main.py"
+        -> ("/tmp/repo", "server.main", True)   if server/__init__.py exists
+
+      agent_path="/tmp/repo", main_file="server/main.py"
+        -> ("/tmp/repo", "server.main", True)   if server/__init__.py exists
+
+      agent_path="/tmp/repo", main_file="agent.py"
+        -> ("/tmp/repo", None, False)           no __init__.py
+    """
+    main_path = Path(agent_path) / main_file
+    current = main_path.parent
+    package_parts = [main_path.stem]
+
+    # Walk up from the agent file looking for __init__.py
+    while True:
+        init_file = current / "__init__.py"
+        if not init_file.exists():
+            break
+        package_parts.insert(0, current.name)
+        current = current.parent
+
+    if len(package_parts) > 1:
+        # Found a package hierarchy
+        module_name = ".".join(package_parts)
+        return str(current), module_name, True
+
+    # Fallback: check pyproject.toml at repo_root
+    if repo_root:
+        repo_root_path = Path(repo_root)
+        pyproject = repo_root_path / "pyproject.toml"
+        if pyproject.exists():
+            try:
+                import tomllib
+            except ImportError:
+                try:
+                    import tomli as tomllib
+                except ImportError:
+                    return agent_path, None, False
+            try:
+                with open(pyproject, "rb") as f:
+                    config = tomllib.load(f)
+                packages = config.get("tool", {}).get("setuptools", {}).get("packages", [])
+                agent_dir_name = Path(agent_path).name
+                if agent_dir_name in packages:
+                    module_name = f"{agent_dir_name}.{main_path.stem}"
+                    return str(repo_root_path), module_name, True
+            except Exception:
+                pass
+
+    return agent_path, None, False
+
+
+def _execute_agent_background(agent_id: str, session_id: str, agent_path: str, main_file: str, task: str, repo_root: str = None):
     """Background thread to execute agent with PhantomGuard monitoring"""
     import importlib.util
     import time
@@ -1047,33 +1133,75 @@ def _execute_agent_background(agent_id: str, session_id: str, agent_path: str, m
         
         # Auto-install agent dependencies before execution
         agent_path_obj = Path(agent_path)
-        req_file = agent_path_obj / "requirements.txt"
-        if req_file.exists():
+        repo_root_obj = Path(repo_root) if repo_root else agent_path_obj
+
+        pyproject_file = repo_root_obj / "pyproject.toml"
+        req_file = repo_root_obj / "requirements.txt"
+        agent_req_file = agent_path_obj / "requirements.txt"
+
+        if pyproject_file.exists():
+            logger.info(f"Installing agent package from {repo_root_obj}")
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-e", str(repo_root_obj), "-q"],
+                capture_output=True, text=True, timeout=120
+            )
+        elif req_file.exists():
             logger.info(f"Installing agent requirements from {req_file}")
             subprocess.run(
                 [sys.executable, "-m", "pip", "install", "-r", str(req_file), "-q"],
                 capture_output=True, text=True, timeout=120
             )
+        elif agent_req_file.exists() and str(agent_req_file) != str(req_file):
+            logger.info(f"Installing agent requirements from {agent_req_file}")
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-r", str(agent_req_file), "-q"],
+                capture_output=True, text=True, timeout=120
+            )
 
-        # Dynamically load and execute agent
+        # Disable prompt caching to avoid Bedrock ValidationException
+        # ("There is nothing available to cache") when system prompt is short
+        if "STRANDS_CACHE_PROMPT" not in os.environ:
+            os.environ["STRANDS_CACHE_PROMPT"] = ""
+        if "STRANDS_CACHE_TOOLS" not in os.environ:
+            os.environ["STRANDS_CACHE_TOOLS"] = ""
+
+        # Detect package structure
+        package_root, module_name, is_package = _detect_package_info(
+            agent_path, main_file, repo_root
+        )
         main_file_path = agent_path_obj / main_file
 
-        # Add agent path to sys.path for imports
-        if str(agent_path) not in sys.path:
-            sys.path.insert(0, str(agent_path))
-        
-        # Load the agent module
-        spec = importlib.util.spec_from_file_location("agent_module", main_file_path)
-        if spec is None or spec.loader is None:
-            raise Exception(f"Could not load agent from {main_file_path}")
-        
-        agent_module = importlib.util.module_from_spec(spec)
-        agent_module.__name__ = "agent_module"  # Prevent __main__ block from running
-        sys.modules["agent_module"] = agent_module
+        # Dynamically load agent module
+        if is_package:
+            logger.info(f"Loading as package: {module_name} from {package_root}")
+            if package_root not in sys.path:
+                sys.path.insert(0, package_root)
+            try:
+                agent_module = importlib.import_module(module_name)
+            except ImportError as e:
+                logger.warning(f"Package import failed ({e}), trying pip install...")
+                if pyproject_file.exists():
+                    subprocess.run(
+                        [sys.executable, "-m", "pip", "install", "-e", str(repo_root_obj), "-q"],
+                        capture_output=True, text=True, timeout=120
+                    )
+                    agent_module = importlib.import_module(module_name)
+                else:
+                    raise
+        else:
+            logger.info(f"Loading as single file: {main_file_path}")
+            if str(agent_path) not in sys.path:
+                sys.path.insert(0, str(agent_path))
 
-        # Execute the module (this will create the agent)
-        spec.loader.exec_module(agent_module)
-        
+            spec = importlib.util.spec_from_file_location("agent_module", main_file_path)
+            if spec is None or spec.loader is None:
+                raise Exception(f"Could not load agent from {main_file_path}")
+
+            agent_module = importlib.util.module_from_spec(spec)
+            agent_module.__name__ = "agent_module"  # Prevent __main__ block from running
+            sys.modules["agent_module"] = agent_module
+            spec.loader.exec_module(agent_module)
+
         # Try to find the agent instance
         from strands import Agent as StrandsAgent
         agent_instance = None
@@ -1095,12 +1223,63 @@ def _execute_agent_background(agent_id: str, session_id: str, agent_path: str, m
                     agent_instance = obj
                     logger.info(f"Found agent instance: {attr_name}")
                     break
-        
+
+        # 3. If still not found, look for factory functions (create_*_agent, make_agent, etc.)
+        if agent_instance is None:
+            factory_patterns = ['create_agent', 'make_agent', 'build_agent', 'get_agent']
+            for attr_name in dir(agent_module):
+                if attr_name.startswith('_'):
+                    continue
+                # Match create_*_agent pattern (e.g., create_trading_agent)
+                if (attr_name.startswith('create_') and attr_name.endswith('_agent')) or \
+                   attr_name in factory_patterns:
+                    func = getattr(agent_module, attr_name, None)
+                    if callable(func):
+                        try:
+                            logger.info(f"Calling factory function: {attr_name}()")
+                            result_obj = func()
+
+                            # Handle direct Agent return
+                            if isinstance(result_obj, StrandsAgent):
+                                agent_instance = result_obj
+                                logger.info(f"Got Agent from factory: {attr_name}")
+                                break
+
+                            # Handle tuple/list return (e.g. (agent, mcp_client))
+                            if isinstance(result_obj, (tuple, list)):
+                                for item in result_obj:
+                                    if isinstance(item, StrandsAgent):
+                                        agent_instance = item
+                                        logger.info(f"Got Agent from factory tuple: {attr_name}")
+                                        break
+                                if agent_instance is not None:
+                                    break
+
+                            # Handle dict return (e.g. {"agent": agent, ...})
+                            if isinstance(result_obj, dict):
+                                for val in result_obj.values():
+                                    if isinstance(val, StrandsAgent):
+                                        agent_instance = val
+                                        logger.info(f"Got Agent from factory dict: {attr_name}")
+                                        break
+                                if agent_instance is not None:
+                                    break
+
+                        except Exception as e:
+                            logger.warning(f"Factory {attr_name}() failed: {e}")
+
         if agent_instance is None:
             # Fallback: execute as subprocess with environment variables
+            if is_package:
+                cmd = [sys.executable, "-m", module_name]
+                cwd = package_root
+            else:
+                cmd = [sys.executable, str(main_file_path)]
+                cwd = agent_path
+
             result = subprocess.run(
-                [sys.executable, str(main_file_path)],
-                cwd=agent_path,
+                cmd,
+                cwd=cwd,
                 capture_output=True,
                 text=True,
                 timeout=300,

@@ -6,6 +6,7 @@ Wraps and executes agents with PhantomGuard monitoring
 
 import sys
 import json
+import importlib
 import importlib.util
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -48,19 +49,27 @@ class AgentRunner:
         )
     
     def _load_agent_module(self):
-        """Load agent module dynamically"""
+        """Load agent module dynamically - handles both single files and packages"""
         if not self.main_file.exists():
             raise FileNotFoundError(f"Agent file not found: {self.main_file}")
-        
-        # Add agent directory to path
-        sys.path.insert(0, str(self.agent_path))
-        
-        # Load module
-        spec = importlib.util.spec_from_file_location("agent_module", self.main_file)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        
-        return module
+
+        # Detect package structure
+        from phantomguard.api import _detect_package_info
+        package_root, module_name, is_package = _detect_package_info(
+            str(self.agent_path), self.agent_info['main_file'],
+            self.agent_info.get('repo_root')
+        )
+
+        if is_package:
+            if package_root not in sys.path:
+                sys.path.insert(0, package_root)
+            return importlib.import_module(module_name)
+        else:
+            sys.path.insert(0, str(self.agent_path))
+            spec = importlib.util.spec_from_file_location("agent_module", self.main_file)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
     
     def _find_agent_instance(self, module):
         """
