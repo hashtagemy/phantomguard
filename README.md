@@ -1,4 +1,4 @@
-# 🛡️ PhantomGuard
+# PhantomGuard
 
 > **AI Agent Quality & Security Monitoring Platform**
 
