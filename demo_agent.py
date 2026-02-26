@@ -1,5 +1,5 @@
 """
-Demo Agent — monitored by PhantomGuard.
+Demo Agent — monitored by Norn.
 
 Usage:
     python demo_agent.py
@@ -13,7 +13,7 @@ import os
 # Suppress all logs — only conversation output in terminal
 logging.disable(logging.CRITICAL)
 
-from phantomguard import PhantomGuardHook
+from norn import NornHook
 from strands import Agent
 from strands.handlers import null_callback_handler
 from strands.models import BedrockModel
@@ -62,8 +62,8 @@ def delete_file(path: str) -> str:
 
 # ── Agent setup ────────────────────────────────────────────
 
-guard = PhantomGuardHook(
-    phantomguard_url="http://localhost:8000",
+guard = NornHook(
+    norn_url="http://localhost:8000",
     agent_name="Demo Agent",
 )
 

@@ -1,7 +1,7 @@
 # pyproject.toml
 
 [project]
-name = "phantomguard"
+name = "norn"
 version = "0.2.0"
 description = "AI Agent Quality & Security Monitoring Platform - Real-time task execution tracking, loop detection, and threat prevention for Strands agents using Amazon Nova"
 readme = "README.md"
@@ -42,10 +42,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/hashtagemy/phantomguard"
-Documentation = "https://github.com/hashtagemy/phantomguard#readme"
-Repository = "https://github.com/hashtagemy/phantomguard"
-Issues = "https://github.com/hashtagemy/phantomguard/issues"
+Homepage = "https://github.com/hashtagemy/norn"
+Documentation = "https://github.com/hashtagemy/norn#readme"
+Repository = "https://github.com/hashtagemy/norn"
+Issues = "https://github.com/hashtagemy/norn/issues"
 
 [project.optional-dependencies]
 api = [
@@ -61,7 +61,7 @@ dev = [
     "requests>=2.31.0",
 ]
 all = [
-    "phantomguard[api,dev]",
+    "norn[api,dev]",
 ]
 
 [build-system]
@@ -69,11 +69,11 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["phantomguard*"]
+include = ["norn*"]
 exclude = ["tests*", "demo*", "examples*"]
 
 [tool.setuptools.package-data]
-phantomguard = ["py.typed"]
+norn = ["py.typed"]
 
 [tool.ruff]
 line-length = 100

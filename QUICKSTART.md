@@ -1,6 +1,6 @@
-# PhantomGuard — Quick Start Guide
+# Norn — Quick Start Guide
 
-> Get PhantomGuard running locally in under 10 minutes.
+> Get Norn running locally in under 10 minutes.
 
 ---
 
@@ -18,8 +18,8 @@
 ## 1. Clone & Install
 
 ```bash
-git clone https://github.com/hashtagemy/phantomguard.git
-cd phantomguard
+git clone https://github.com/hashtagemy/norn.git
+cd norn
 
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
@@ -30,7 +30,7 @@ pip install -e ".[api]"
 pip install -e ".[browser]"
 # Then set NOVA_ACT_API_KEY in your .env file
 
-cd phantomguard-dashboard
+cd norn-dashboard
 npm install
 cd ..
 ```
@@ -60,14 +60,14 @@ AWS_DEFAULT_REGION=us-east-1
 
 ```bash
 source .venv/bin/activate
-python -m phantomguard.api
+python -m norn.api
 ```
 
 Confirm it is running:
 
 ```bash
 curl http://localhost:8000/
-# {"status":"online","service":"PhantomGuard API"}
+# {"status":"online","service":"Norn API"}
 ```
 
 ---
@@ -77,7 +77,7 @@ curl http://localhost:8000/
 Open a new terminal:
 
 ```bash
-cd phantomguard-dashboard
+cd norn-dashboard
 npm run dev
 ```
 
@@ -91,7 +91,7 @@ The **"System Online"** indicator in the top bar should be green. If it shows of
 
 1. Click **"+ Add Agent"** in the left sidebar
 2. Paste a GitHub repository URL **or** upload a ZIP file containing your agent
-3. Wait for PhantomGuard to import and analyze it
+3. Wait for Norn to import and analyze it
 4. Click **"Run"** on the agent card
 5. Enter a task description and click **Run**
 6. Watch the live execution feed — scores and issues appear in real time
@@ -102,7 +102,7 @@ The **"System Online"** indicator in the top bar should be green. If it shows of
 
 | Problem | Solution |
 |---|---|
-| `ModuleNotFoundError: phantomguard` | Run `pip install -e ".[api]"` inside the virtual environment |
+| `ModuleNotFoundError: norn` | Run `pip install -e ".[api]"` inside the virtual environment |
 | Port 8000 already in use | `lsof -i :8000` to find the process, then `kill <PID>` |
 | Dashboard shows "Connection Error" | Confirm the backend is running: `curl localhost:8000/` |
 | AWS credentials error | Check `.env` values and verify Bedrock access in your AWS account |
@@ -115,4 +115,4 @@ The **"System Online"** indicator in the top bar should be green. If it shows of
 ## Next Steps
 
 - **Configuration** — Adjust guard mode and thresholds in the dashboard **Settings** panel
-- **Integration** — See [README.md](README.md) to embed PhantomGuard directly into your agent code
+- **Integration** — See [README.md](README.md) to embed Norn directly into your agent code

@@ -28,11 +28,11 @@ Thumbs.db
 .env
 .env.local
 
-# PhantomGuard logs and runtime data (generated at runtime)
-phantomguard_logs/*
-!phantomguard_logs/.gitkeep
-!phantomguard_logs/*/
-!phantomguard_logs/*/.gitkeep
+# Norn logs and runtime data (generated at runtime)
+norn_logs/*
+!norn_logs/.gitkeep
+!norn_logs/*/
+!norn_logs/*/.gitkeep
 
 # Runtime-generated files
 agents_registry.json

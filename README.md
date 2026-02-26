@@ -1,4 +1,4 @@
-# 🛡️ PhantomGuard
+# 🛡️ Norn
 
 > **AI Agent Quality & Security Monitoring Platform**
 
@@ -28,10 +28,10 @@ You need to test, analyze, and monitor them before and during execution.
 
 ## 💡 The Solution
 
-PhantomGuard provides a complete platform for agent testing and monitoring:
+Norn provides a complete platform for agent testing and monitoring:
 
 ### 1. Import & Analyze
-Import agents from GitHub or ZIP files. PhantomGuard automatically:
+Import agents from GitHub or ZIP files. Norn automatically:
 - Discovers tools, functions, and dependencies
 - Detects missing packages and installs them
 - Identifies potential issues (security, credentials, missing tools)
@@ -65,24 +65,24 @@ Shadow browser verification powered by Nova Act:
 
 ```bash
 # Clone repository
-git clone https://github.com/hashtagemy/phantomguard.git
-cd phantomguard
+git clone https://github.com/hashtagemy/norn.git
+cd norn
 
 # Install backend
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[api]"
 
 # Install frontend
-cd phantomguard-dashboard && npm install && cd ..
+cd norn-dashboard && npm install && cd ..
 
 # Configure environment
 cp .env.example .env  # Add your AWS credentials
 
 # Start backend (terminal 1)
-python -m phantomguard.api
+python -m norn.api
 
 # Start dashboard (terminal 2)
-cd phantomguard-dashboard && npm run dev
+cd norn-dashboard && npm run dev
 # Open http://localhost:3000
 ```
 
@@ -153,7 +153,7 @@ Requires a Nova Act API key (early access): set `NOVA_ACT_API_KEY` in your `.env
 
 ## 🤖 Amazon Nova Models Used
 
-PhantomGuard is built entirely on the Amazon Nova model family, with each model chosen for its strengths:
+Norn is built entirely on the Amazon Nova model family, with each model chosen for its strengths:
 
 | Feature | Model | Why |
 |---|---|---|
@@ -173,21 +173,21 @@ Nova Act                  # Shadow browser verification (requires NOVA_ACT_API_K
 
 ## 🔧 Integration Methods
 
-Add PhantomGuard to your own Strands agent in one of four ways:
+Add Norn to your own Strands agent in one of four ways:
 
 ### 1. Manual Hook
 ```python
-from phantomguard import PhantomGuardHook
+from norn import NornHook
 from strands import Agent
 
-guard = PhantomGuardHook(task="Your task description")
+guard = NornHook(task="Your task description")
 agent = Agent(tools=[...], hooks=[guard])
 agent("Your task description")
 ```
 
 ### 2. Proxy Wrapper
 ```python
-from phantomguard.proxy import MonitoredAgent
+from norn.proxy import MonitoredAgent
 
 agent = MonitoredAgent(model=model, tools=tools, task="Your task description")
 agent("Your task description")
@@ -195,7 +195,7 @@ agent("Your task description")
 
 ### 3. Global Monitoring
 ```python
-from phantomguard.proxy import enable_global_monitoring
+from norn.proxy import enable_global_monitoring
 
 enable_global_monitoring()
 # All Agent instances are now monitored automatically
@@ -203,7 +203,7 @@ enable_global_monitoring()
 
 ### 4. Environment Variable (Zero Code)
 ```bash
-export PHANTOMGUARD_AUTO_ENABLE=true
+export NORN_AUTO_ENABLE=true
 python your_agent.py
 ```
 
@@ -259,7 +259,7 @@ python your_agent.py
 └────────────────────┬────────────────────────────────────┘
                      │
 ┌────────────────────▼────────────────────────────────────┐
-│              PhantomGuard Core                          │
+│              Norn Core                          │
 │  • Hook Integration (Strands)                           │
 │  • Step Analyzer (loops, drift)                         │
 │  • Quality Evaluator (Amazon Nova)                      │
@@ -273,14 +273,14 @@ python your_agent.py
 
 | File | Purpose |
 |---|---|
-| `phantomguard/api.py` | FastAPI server — REST + WebSocket + task generation |
-| `phantomguard/core/interceptor.py` | Hook implementation |
-| `phantomguard/core/step_analyzer.py` | Deterministic loop & drift detection |
-| `phantomguard/core/audit_logger.py` | Structured JSON logging |
-| `phantomguard/agents/quality_evaluator.py` | AI scoring via Amazon Nova |
-| `phantomguard/agents/shadow_browser.py` | Nova Act browser verification |
-| `phantomguard/utils/agent_discovery.py` | AST-based code analysis |
-| `phantomguard/utils/agent_runner.py` | Agent execution harness |
+| `norn/api.py` | FastAPI server — REST + WebSocket + task generation |
+| `norn/core/interceptor.py` | Hook implementation |
+| `norn/core/step_analyzer.py` | Deterministic loop & drift detection |
+| `norn/core/audit_logger.py` | Structured JSON logging |
+| `norn/agents/quality_evaluator.py` | AI scoring via Amazon Nova |
+| `norn/agents/shadow_browser.py` | Nova Act browser verification |
+| `norn/utils/agent_discovery.py` | AST-based code analysis |
+| `norn/utils/agent_runner.py` | Agent execution harness |
 
 ---
 
@@ -310,4 +310,4 @@ Apache 2.0 — See [LICENSE](LICENSE) for details.
 
 ---
 
-*PhantomGuard — Because your agents should be monitored, not mysterious.*
+*Norn — Because your agents should be monitored, not mysterious.*
