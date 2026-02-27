@@ -21,6 +21,22 @@ import asyncio
 
 logger = logging.getLogger("norn.api")
 
+
+def _atomic_write_json(path: Path, data: dict) -> None:
+    """Write JSON to a file atomically via a temp file + rename.
+    Prevents 0-byte files if the process is killed mid-write."""
+    tmp_fd, tmp_path = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(tmp_fd, "w") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
 app = FastAPI(title="Norn API", version="1.0.0")
 
 # WebSocket connection manager
@@ -1976,8 +1992,7 @@ def ingest_session(data: Dict[str, Any]) -> Dict[str, Any]:
             existing["ended_at"] = None
             if data.get("task") and not existing.get("task"):
                 existing["task"] = data["task"]
-            with open(session_file, "w") as f:
-                json.dump(existing, f, indent=2)
+            _atomic_write_json(session_file, existing)
             logger.info("Session resumed: %s (%d existing steps)", session_id, len(existing.get("steps", [])))
             return existing
         except Exception as e:
@@ -2011,9 +2026,7 @@ def ingest_session(data: Dict[str, Any]) -> Dict[str, Any]:
         "efficiency_explanation": "",
     }
 
-    with open(session_file, "w") as f:
-        json.dump(session_data, f, indent=2)
-
+    _atomic_write_json(session_file, session_data)
     logger.info("Session created: %s", session_id)
     return session_data
 
@@ -2034,8 +2047,7 @@ async def add_session_step(session_id: str, data: Dict[str, Any]) -> Dict[str, A
         session["total_steps"] = len(session["steps"])
         session["status"] = "active"
 
-        with open(session_file, "w") as f:
-            json.dump(session, f, indent=2)
+        _atomic_write_json(session_file, session)
 
         # Broadcast to WebSocket clients
         try:
@@ -2075,8 +2087,7 @@ async def complete_session(session_id: str, data: Dict[str, Any]) -> Dict[str, A
 
         session["status"] = data.get("status", "completed")
 
-        with open(session_file, "w") as f:
-            json.dump(session, f, indent=2)
+        _atomic_write_json(session_file, session)
 
         # Broadcast to WebSocket clients
         try:

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import tempfile
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -98,8 +100,19 @@ class LocalFileStore:
                     merged = existing_steps + appended
                     new_data["steps"] = merged
                     new_data["total_steps"] = len(merged)
-            with open(path, "w") as f:
-                json.dump(new_data, f, indent=2)
+            # Atomic write: write to temp file first, then rename.
+            # Prevents 0-byte files if the process is killed mid-write.
+            tmp_fd, tmp_path = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+            try:
+                with os.fdopen(tmp_fd, "w") as f:
+                    json.dump(new_data, f, indent=2)
+                os.replace(tmp_path, path)
+            except Exception:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
 
     def read_sessions(self) -> list[dict]:
         sessions = []

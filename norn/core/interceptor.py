@@ -13,10 +13,12 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import atexit
 import inspect
 import json
 import logging
 import os
+import threading
 import time
 import urllib.request
 from datetime import datetime, timezone
@@ -249,7 +251,6 @@ class NornHook(HookProvider):
 
         # Auto-run AI evaluation in background thread — non-blocking
         if self.enable_ai_eval and self.task:
-            import threading
 
             def _bg_eval():
                 try:
@@ -263,9 +264,15 @@ class NornHook(HookProvider):
                 except Exception as e:
                     logger.error("Background AI evaluation failed: %s", e)
 
-            threading.Thread(
+            bg_thread = threading.Thread(
                 target=_bg_eval, daemon=True, name="norn-bg-eval"
-            ).start()
+            )
+            bg_thread.start()
+
+            # Ensure AI eval completes before Python kills daemon threads.
+            # atexit handlers run after main thread exits but BEFORE daemon
+            # threads are killed — giving the eval up to 15 seconds to finish.
+            atexit.register(bg_thread.join, 15)
 
     async def _await_pending_and_evaluate(self) -> None:
         """Wait for all pending step evaluations, then run session AI eval."""

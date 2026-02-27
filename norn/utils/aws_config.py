@@ -7,6 +7,7 @@ Handles both bearer token and IAM credentials authentication.
 import os
 from typing import Dict, Any, Optional
 import boto3
+import botocore
 from botocore.config import Config
 
 
@@ -30,29 +31,24 @@ def get_bedrock_client(region: Optional[str] = None):
     bearer_token = os.getenv("AWS_BEARER_TOKEN_BEDROCK")
     
     if bearer_token:
-        # Bearer token authentication
-        # Bedrock uses the token in the Authorization header
+        # Bedrock API Key (bearer token) authentication.
+        # Use UNSIGNED to skip SigV4 signing entirely, then inject
+        # the Authorization: Bearer header via a botocore event hook.
         client = boto3.client(
             "bedrock-runtime",
             region_name=region,
+            aws_access_key_id="placeholder",
+            aws_secret_access_key="placeholder",
             config=Config(
-                signature_version="v4",
+                signature_version=botocore.UNSIGNED,
                 retries={"max_attempts": 3, "mode": "adaptive"},
             ),
         )
-        
-        # Inject bearer token into client's request headers
-        # This is a workaround since boto3 doesn't natively support bearer tokens
-        original_make_request = client._make_request
-        
-        def make_request_with_token(operation_model, request_dict, request_context):
-            # Add bearer token to headers
-            if "headers" not in request_dict:
-                request_dict["headers"] = {}
-            request_dict["headers"]["Authorization"] = f"Bearer {bearer_token}"
-            return original_make_request(operation_model, request_dict, request_context)
-        
-        client._make_request = make_request_with_token
+
+        def _inject_bearer(request, **kwargs):
+            request.headers["Authorization"] = f"Bearer {bearer_token}"
+
+        client.meta.events.register("before-send.bedrock-runtime.*", _inject_bearer)
         return client
     
     else:
