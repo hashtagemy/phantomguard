@@ -1,12 +1,13 @@
 import React from 'react';
 import { Session } from '../../types';
-import { Terminal, AlertCircle, AlertTriangle, Info, XCircle } from 'lucide-react';
+import { Terminal, AlertCircle, AlertTriangle, Info, XCircle, Trash2 } from 'lucide-react';
 
 interface ExecutionStepsPanelProps {
   session: Session;
+  onDeleteStep?: (stepId: string) => void;
 }
 
-export const ExecutionStepsPanel: React.FC<ExecutionStepsPanelProps> = ({ session }) => {
+export const ExecutionStepsPanel: React.FC<ExecutionStepsPanelProps> = ({ session, onDeleteStep }) => {
   const isTerminated = session.status === 'terminated';
   const isActive = session.status === 'active';
   const hasSteps = session.steps.length > 0;
@@ -78,7 +79,7 @@ export const ExecutionStepsPanel: React.FC<ExecutionStepsPanelProps> = ({ sessio
         )}
 
         {[...session.steps].reverse().map((step, idx, arr) => (
-          <div key={step.id} className="relative pl-6">
+          <div key={step.id} className="group relative pl-6">
             {/* Timeline Line */}
             {idx < arr.length - 1 && (
               <div className="absolute left-2 top-5 bottom-0 w-px bg-dark-border"></div>
@@ -93,6 +94,17 @@ export const ExecutionStepsPanel: React.FC<ExecutionStepsPanelProps> = ({ sessio
               step.type === 'tool_result' ? 'bg-cyan-500' :
               step.type === 'user' ? 'bg-blue-500' : 'bg-gray-600'
             }`}></div>
+
+            {/* Delete button — appears on hover */}
+            {onDeleteStep && (
+              <button
+                onClick={() => onDeleteStep(step.id)}
+                title="Delete step"
+                className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-red-950/40 z-10"
+              >
+                <Trash2 size={11} className="text-red-500/50 hover:text-red-400" />
+              </button>
+            )}
 
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5">

@@ -4,6 +4,7 @@ import { StatusBadge } from './StatusBadge';
 import { TestResultsPanel } from './panels/TestResultsPanel';
 import { ExecutionStepsPanel } from './panels/ExecutionStepsPanel';
 import { AIAnalysisPanel } from './panels/AIAnalysisPanel';
+import { api } from '../services/api';
 import {
   Terminal,
   Cpu,
@@ -15,10 +16,28 @@ import {
 interface SessionDetailProps {
   session: Session;
   onBack: () => void;
+  onSessionUpdate?: (updatedSession: Session) => void;
 }
 
-export const SessionDetail: React.FC<SessionDetailProps> = ({ session, onBack }) => {
+export const SessionDetail: React.FC<SessionDetailProps> = ({ session, onBack, onSessionUpdate }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'steps' | 'analysis'>('overview');
+  const [localSteps, setLocalSteps] = useState(session.steps);
+
+  // Dışarıdan yeni session gelince localSteps'i senkronize et
+  React.useEffect(() => { setLocalSteps(session.steps); }, [session.id, session.steps.length]);
+
+  const handleDeleteStep = async (stepId: string) => {
+    try {
+      await api.deleteStep(session.id, stepId);
+      const updated = localSteps.filter(s => s.id !== stepId);
+      setLocalSteps(updated);
+      if (onSessionUpdate) {
+        onSessionUpdate({ ...session, steps: updated });
+      }
+    } catch (err) {
+      console.error('Failed to delete step:', err);
+    }
+  };
 
   // Calculate pass rate for header badge
   const effScore = session.efficiencyScore;
@@ -92,7 +111,7 @@ export const SessionDetail: React.FC<SessionDetailProps> = ({ session, onBack })
         >
           <div className="flex items-center gap-2">
             <Terminal size={16} />
-            Execution Steps ({session.steps.length})
+            Execution Steps ({localSteps.length})
           </div>
         </button>
         <button
@@ -113,7 +132,12 @@ export const SessionDetail: React.FC<SessionDetailProps> = ({ session, onBack })
       {/* Tab Content */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         {activeTab === 'overview' && <TestResultsPanel session={session} />}
-        {activeTab === 'steps' && <ExecutionStepsPanel session={session} />}
+        {activeTab === 'steps' && (
+          <ExecutionStepsPanel
+            session={{ ...session, steps: localSteps }}
+            onDeleteStep={handleDeleteStep}
+          />
+        )}
         {activeTab === 'analysis' && <AIAnalysisPanel session={session} />}
       </div>
     </div>

@@ -2142,6 +2142,29 @@ def delete_session(session_id: str) -> Dict[str, str]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.delete("/api/sessions/{session_id}/steps/{step_id}", dependencies=[Depends(verify_api_key)])
+def delete_step(session_id: str, step_id: str) -> Dict:
+    """Delete a single step from a session."""
+    session_file = SESSIONS_DIR / f"{session_id}.json"
+    if not session_file.exists():
+        raise HTTPException(status_code=404, detail="Session not found")
+    try:
+        with open(session_file) as f:
+            session = json.load(f)
+        steps = session.get("steps", [])
+        new_steps = [s for s in steps if s.get("step_id") != step_id]
+        if len(new_steps) == len(steps):
+            raise HTTPException(status_code=404, detail="Step not found")
+        session["steps"] = new_steps
+        session["total_steps"] = len(new_steps)
+        _atomic_write_json(session_file, session)
+        return {"ok": True, "remaining": len(new_steps)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ── Swarm Endpoints ────────────────────────────────────────────────────────
 
 

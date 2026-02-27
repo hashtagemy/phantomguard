@@ -625,7 +625,7 @@ class NornHook(HookProvider):
                 logger.warning("Dashboard: agent registration failed, streaming disabled")
                 return
 
-        # Create or resume session
+        # Create or resume session (steps accumulate across runs on the same card)
         if self._session_report:
             resp = self._post_to_dashboard("/api/sessions/ingest", {
                 "session_id": self._session_report.session_id,
@@ -638,7 +638,7 @@ class NornHook(HookProvider):
                 "swarm_order": self.swarm_order,
                 "handoff_input": self.handoff_input,
             })
-            # Resume step counter from existing session
+            # Step counter'ı mevcut adım sayısından devam ettir
             if resp:
                 existing_steps = resp.get("steps") or []
                 self._existing_step_count = len(existing_steps)

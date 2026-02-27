@@ -295,6 +295,12 @@ class ApiClient {
     });
   }
 
+  async deleteStep(sessionId: string, stepId: string): Promise<{ ok: boolean; remaining: number }> {
+    return this.request(`/api/sessions/${sessionId}/steps/${stepId}`, {
+      method: 'DELETE',
+    });
+  }
+
   async runAgent(agentId: string, task: string): Promise<{ status: string; session_id: string; agent_id: string; message: string }> {
     return this.request(`/api/agents/${agentId}/run`, {
       method: 'POST',
