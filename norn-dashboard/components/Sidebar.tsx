@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Settings, FileText, Ghost, Plus, Globe, Network } from 'lucide-react';
+import { LayoutDashboard, Settings, FileText, Plus, Globe, Network } from 'lucide-react';
 
 interface SidebarProps {
   currentView: string;
@@ -19,9 +19,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) =
     <div className="w-64 border-r border-dark-border bg-dark-bg flex flex-col">
       {/* Brand */}
       <div className="h-16 flex items-center gap-3 px-6 border-b border-dark-border">
-        <div className="w-8 h-8 bg-phantom-600 rounded-lg flex items-center justify-center shadow-lg shadow-phantom-500/20">
-          <Ghost size={20} className="text-white" />
-        </div>
+        <img src="/favicon.svg" alt="Norn" className="w-8 h-8 flex-shrink-0" />
         <span className="font-bold text-gray-100 tracking-tight">Norn</span>
       </div>
 
