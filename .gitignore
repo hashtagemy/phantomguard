@@ -66,3 +66,4 @@ repl_state/
 .pytest_cache/
 htmlcov/
 .coverage
+docs/
