@@ -120,7 +120,7 @@ export const ExecutionStepsPanel: React.FC<ExecutionStepsPanelProps> = ({ sessio
                   step.type === 'user' ? 'bg-blue-950/30 text-blue-400' : 'bg-gray-800 text-gray-400'
                 }`}>
                   {step.type === 'agent_thought' && <Brain size={9} />}
-                  {step.type === 'agent_thought' ? 'AI Reasoning' : step.type.replace(/_/g, ' ')}
+                  {step.type === 'agent_thought' ? 'AI Reasoning' : step.type === 'phantom_check' ? 'NORN CHECK' : step.type.replace(/_/g, ' ')}
                 </span>
                 {step.metadata?.toolName && step.type !== 'agent_thought' && (
                   <span className="text-[10px] text-gray-500">&rarr; {step.metadata.toolName}</span>

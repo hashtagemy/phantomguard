@@ -13,7 +13,6 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-import atexit
 import inspect
 import json
 import logging
@@ -101,11 +100,7 @@ class NornHook(HookProvider):
         self.handoff_input = handoff_input
 
         # Components
-        self.step_analyzer = StepAnalyzer(
-            loop_window=5,
-            loop_threshold=3,
-            max_same_tool=10,
-        )
+        self.step_analyzer = StepAnalyzer()
         self.audit = audit_logger if audit_logger else AuditLogger()
 
         # Dashboard integration
@@ -122,7 +117,8 @@ class NornHook(HookProvider):
         self._issues: list[QualityIssue] = []
         self._session_report: Optional[SessionReport] = None
         self._loop_detected: bool = False
-        self._pending_tasks: list[asyncio.Task] = []  # Track async eval/verify tasks
+        self._pending_tasks: list[asyncio.Task] = []  # Kept for compatibility, no longer used
+        self._steps_to_evaluate: list[tuple] = []  # (StepRecord, full_result) — evaluated in bg loop
 
         # Lazy-loaded components
         self._evaluator = None
@@ -154,6 +150,7 @@ class NornHook(HookProvider):
         self._issues = []
         self._loop_detected = False
         self._pending_tasks = []
+        self._steps_to_evaluate = []
         self.step_analyzer.reset()
 
         # Try to extract model name from the agent
@@ -311,43 +308,56 @@ class NornHook(HookProvider):
         # Finalize with heuristic scores first (fast)
         self._finalize_report()
 
-        # Auto-run AI evaluation in background thread — non-blocking
+        # Run AI evaluation synchronously — blocks until done.
+        #
+        # Why not a background thread?
+        # CPython runs atexit handlers BEFORE joining non-daemon threads.
+        # concurrent.futures._python_exit() (registered via atexit) shuts down
+        # ALL thread-pool executors before our bg-thread finishes its Bedrock call
+        # → "cannot schedule new futures after interpreter shutdown".
+        #
+        # Solution: run evaluation in a short-lived ThreadPoolExecutor whose
+        # lifetime is managed explicitly by the `with` block — shutdown(wait=True)
+        # is called synchronously here, before atexit has any chance to run.
         if self.enable_ai_eval and self.task:
+            import concurrent.futures as _cf
 
-            def _bg_eval():
+            def _eval_target():
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
                 try:
-                    new_loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(new_loop)
-                    try:
-                        new_loop.run_until_complete(self._run_ai_evaluation())
-                    finally:
-                        new_loop.close()
-                        asyncio.set_event_loop(None)
-                except Exception as e:
-                    logger.error("Background AI evaluation failed: %s", e)
+                    new_loop.run_until_complete(self._await_pending_and_evaluate())
+                finally:
+                    new_loop.close()
+                    asyncio.set_event_loop(None)
 
-            bg_thread = threading.Thread(
-                target=_bg_eval, daemon=True, name="norn-bg-eval"
-            )
-            bg_thread.start()
-
-            # Ensure AI eval completes before Python kills daemon threads.
-            # atexit handlers run after main thread exits but BEFORE daemon
-            # threads are killed — giving the eval up to 15 seconds to finish.
-            atexit.register(bg_thread.join, 15)
+            try:
+                with _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="norn-eval") as _exec:
+                    _exec.submit(_eval_target).result(timeout=60)
+            except Exception as e:
+                logger.error("AI evaluation failed: %s", e)
 
     async def _await_pending_and_evaluate(self) -> None:
-        """Wait for all pending step evaluations, then run session AI eval."""
-        # Wait for all pending step-level async tasks (AI eval + shadow browser)
-        if self._pending_tasks:
-            logger.info(f"Waiting for {len(self._pending_tasks)} pending evaluation tasks...")
-            done, pending = await asyncio.wait(self._pending_tasks, timeout=15.0)
-            if pending:
-                logger.warning(f"{len(pending)} evaluation tasks timed out, cancelling")
-                for t in pending:
-                    t.cancel()
-            # Clean up completed task references
-            self._pending_tasks.clear()
+        """Run all queued step evaluations, then run session AI eval.
+
+        Step evals are collected as plain tuples (not asyncio.Task) to avoid
+        cross-event-loop issues: tasks created in Strands' loop cannot be
+        awaited from the background eval thread's new loop.
+        """
+        if self._steps_to_evaluate:
+            logger.info(f"Evaluating {len(self._steps_to_evaluate)} queued steps...")
+            for item in self._steps_to_evaluate:
+                step, full_result, tool_name, tool_input, mode = item
+                try:
+                    await self._evaluate_step_relevance(step, full_result)
+                except Exception as e:
+                    logger.warning(f"Step eval failed for {step.tool_name}: {e}")
+                if mode == "shadow" and self.enable_shadow_browser:
+                    try:
+                        await self._verify_with_shadow_browser(step, tool_name, tool_input, full_result)
+                    except Exception as e:
+                        logger.warning(f"Shadow browser eval failed: {e}")
+            self._steps_to_evaluate.clear()
 
         # Now run session-level AI evaluation with all step scores available
         if self.enable_ai_eval:
@@ -399,6 +409,11 @@ class NornHook(HookProvider):
             # Check for critical loop
             if issue.issue_type.value == "INFINITE_LOOP" and issue.severity >= 8:
                 self._loop_detected = True
+
+            # Mark security breach for any high-severity security issue found deterministically
+            if issue.issue_type.value == "SECURITY_BYPASS" and issue.severity >= 7:
+                if self._session_report:
+                    self._session_report.security_breach_detected = True
                 
                 if self.mode == GuardMode.INTERVENE:
                     logger.warning(f"INTERVENING: Loop detected at step {self._step_counter}")
@@ -450,15 +465,12 @@ class NornHook(HookProvider):
         if self._norn_url and self._registered_agent_id:
             self._dashboard_send_step(step)
 
-        # AI relevance evaluation (async, tracked)
+        # Queue for evaluation in background thread's event loop (avoids cross-loop task issue)
         if self.enable_ai_eval and self.task:
-            eval_task = asyncio.create_task(self._evaluate_step_relevance(step, result_str_full))
-            self._pending_tasks.append(eval_task)
+            self._steps_to_evaluate.append((step, result_str_full, None, None, None))
 
-        # Shadow Browser verification for browser tools (async, tracked)
         if self.enable_shadow_browser:
-            verify_task = asyncio.create_task(self._verify_with_shadow_browser(step, tool_name, tool_input, result_str_full))
-            self._pending_tasks.append(verify_task)
+            self._steps_to_evaluate.append((step, result_str_full, tool_name, tool_input, "shadow"))
     
     # ── AI Evaluation ──────────────────────────────────────
     
@@ -600,6 +612,32 @@ class NornHook(HookProvider):
         """Save final report to audit log."""
         if not self._session_report:
             return
+
+        # Override AI quality if deterministic checks found critical issues.
+        # AI sees only observable behavior and misses implementation-level threats
+        # (e.g. shell=True RCE, loop evasion). Deterministic rules are ground truth.
+        #
+        # Priority (highest severity wins, applied unconditionally):
+        #   loop_detected / INFINITE_LOOP >= 8  → STUCK  ("agent in infinite loop")
+        #   SECURITY_BYPASS >= 8                → FAILED ("task not completed safely")
+        has_security_bypass = any(
+            i.issue_type == IssueType.SECURITY_BYPASS and i.severity >= 8
+            for i in self._issues
+        )
+        has_loop_issue = any(
+            i.issue_type == IssueType.INFINITE_LOOP and i.severity >= 8
+            for i in self._issues
+        )
+
+        if self._loop_detected or has_loop_issue:
+            self._session_report.overall_quality = SessionQuality.STUCK
+        elif has_security_bypass:
+            self._session_report.overall_quality = SessionQuality.FAILED
+
+        # Cap security_score at 40 whenever a hard security bypass was detected
+        if has_security_bypass:
+            if self._session_report.security_score is None or self._session_report.security_score > 40:
+                self._session_report.security_score = 40
 
         # Write to audit log
         self.audit.record_session(self._session_report)

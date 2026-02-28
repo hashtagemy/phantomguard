@@ -90,14 +90,30 @@ class LocalFileStore:
                 for key in ("agent_id", "status"):
                     if key in existing and not new_data.get(key):
                         new_data[key] = existing[key]
-                # Append new steps to existing ones (don't replace)
+                # Merge steps: update existing steps with non-null new values,
+                # append truly new steps. This ensures AI eval scores written
+                # in the second _finalize_report() call overwrite the null
+                # placeholders from the first (heuristic) write.
                 existing_steps = existing.get("steps") or []
                 new_steps = new_data.get("steps") or []
                 if existing_steps:
-                    # Avoid duplicates by step_id
-                    existing_ids = {s.get("step_id") for s in existing_steps if s.get("step_id")}
-                    appended = [s for s in new_steps if not s.get("step_id") or s.get("step_id") not in existing_ids]
-                    merged = existing_steps + appended
+                    existing_by_id: dict[str, int] = {}
+                    for i, s in enumerate(existing_steps):
+                        sid = s.get("step_id")
+                        if sid:
+                            existing_by_id[sid] = i
+                    merged = [dict(s) for s in existing_steps]
+                    for s in new_steps:
+                        sid = s.get("step_id")
+                        if sid and sid in existing_by_id:
+                            # Update existing step: replace only fields that
+                            # have a real (non-null, non-empty) new value
+                            tgt = merged[existing_by_id[sid]]
+                            for k, v in s.items():
+                                if v is not None and v != "" and v != []:
+                                    tgt[k] = v
+                        else:
+                            merged.append(s)
                     new_data["steps"] = merged
                     new_data["total_steps"] = len(merged)
             # Atomic write: write to temp file first, then rename.
