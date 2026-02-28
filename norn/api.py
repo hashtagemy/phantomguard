@@ -28,6 +28,22 @@ logger = logging.getLogger("norn.api")
 # executions so concurrent requests don't corrupt each other's working directory.
 _chdir_lock = threading.Lock()
 
+# BUG-007: Agent registry is a shared JSON file. Serialize all read-modify-write
+# operations so concurrent imports/deletes don't clobber each other.
+_registry_lock = threading.Lock()
+
+
+def _read_registry() -> list:
+    """Thread-safe registry read."""
+    with _registry_lock:
+        if not REGISTRY_FILE.exists():
+            return []
+        try:
+            with open(REGISTRY_FILE) as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return []
+
 
 def _atomic_write_json(path: Path, data: Any) -> None:
     """Write JSON to a file atomically via a temp file + rename.
@@ -325,35 +341,17 @@ def get_session(session_id: str) -> Dict[str, Any]:
 @app.get("/api/agents", dependencies=[Depends(verify_api_key)])
 def get_agents() -> List[Dict[str, Any]]:
     """Get all registered agents"""
-    if not REGISTRY_FILE.exists():
-        return []
-    
-    try:
-        with open(REGISTRY_FILE) as f:
-            return json.load(f)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return _read_registry()
 
 
 @app.get("/api/agents/{agent_id}", dependencies=[Depends(verify_api_key)])
 def get_agent(agent_id: str) -> Dict[str, Any]:
     """Get specific agent details"""
-    if not REGISTRY_FILE.exists():
-        raise HTTPException(status_code=404, detail="No agents registered")
-    
-    try:
-        with open(REGISTRY_FILE) as f:
-            agents = json.load(f)
-            
-        agent = next((a for a in agents if a["id"] == agent_id), None)
-        if not agent:
-            raise HTTPException(status_code=404, detail="Agent not found")
-        
-        return agent
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    agents = _read_registry()
+    agent = next((a for a in agents if a["id"] == agent_id), None)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return agent
 
 
 def _discover_agent(agent_path: Path, main_file: str) -> Dict[str, Any]:
@@ -979,12 +977,9 @@ def import_github_agent(data: Dict[str, Any]) -> List[Dict[str, Any]]:
         timestamp_base = now.strftime('%Y%m%d%H%M%S')
         created_agents: List[Dict[str, Any]] = []
 
-        # Load existing registry once
+        # Load existing registry once (short lock — git clone happens outside)
         REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
-        agents_list: List[Dict[str, Any]] = []
-        if REGISTRY_FILE.exists():
-            with open(REGISTRY_FILE) as f:
-                agents_list = json.load(f)
+        agents_list: List[Dict[str, Any]] = _read_registry()
         existing_ids = {a["id"] for a in agents_list}
 
         # Install deps once using the first candidate
@@ -1033,8 +1028,22 @@ def import_github_agent(data: Dict[str, Any]) -> List[Dict[str, Any]]:
             agents_list.append(agent_info)
             created_agents.append(agent_info)
 
-        # Write registry once after all agents are processed
-        _atomic_write_json(REGISTRY_FILE, agents_list)
+        # Write registry — re-read under lock to merge with any concurrent imports
+        _captured_agents = list(created_agents)
+        with _registry_lock:
+            current = []
+            if REGISTRY_FILE.exists():
+                try:
+                    with open(REGISTRY_FILE) as f:
+                        current = json.load(f)
+                except (json.JSONDecodeError, OSError):
+                    current = []
+            current_ids = {a["id"] for a in current}
+            for a in _captured_agents:
+                if a["id"] not in current_ids:
+                    current.append(a)
+            REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
+            _atomic_write_json(REGISTRY_FILE, current)
 
         return created_agents
 
@@ -1118,15 +1127,18 @@ async def import_zip_agent(file: UploadFile = File(...), agent_name: str = Form(
             auto_task = _generate_auto_task(agent_name, discovery_info["discovery"], task_description, extract_path)
             agent_info["task_description"] = auto_task
 
-        # Save to registry
-        REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
-        agents = []
-        if REGISTRY_FILE.exists():
-            with open(REGISTRY_FILE) as f:
-                agents = json.load(f)
-
-        agents.append(agent_info)
-        _atomic_write_json(REGISTRY_FILE, agents)
+        # Save to registry — under lock to prevent concurrent import clobber
+        with _registry_lock:
+            REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
+            agents = []
+            if REGISTRY_FILE.exists():
+                try:
+                    with open(REGISTRY_FILE) as f:
+                        agents = json.load(f)
+                except (json.JSONDecodeError, OSError):
+                    agents = []
+            agents.append(agent_info)
+            _atomic_write_json(REGISTRY_FILE, agents)
 
         return agent_info
 
@@ -1141,29 +1153,24 @@ def run_agent(agent_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
     if not task:
         raise HTTPException(status_code=400, detail="task is required")
     
-    if not REGISTRY_FILE.exists():
-        raise HTTPException(status_code=404, detail="No agents registered")
-    
+    agents = _read_registry()
+    agent = next((a for a in agents if a["id"] == agent_id), None)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
     try:
-        with open(REGISTRY_FILE) as f:
-            agents = json.load(f)
-        
-        agent = next((a for a in agents if a["id"] == agent_id), None)
-        if not agent:
-            raise HTTPException(status_code=404, detail="Agent not found")
-        
         # Create session ID
         session_id = f"{agent_id}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        
+
         # Prepare agent execution environment
         agent_path = Path(agent.get("clone_path") or agent.get("extract_path", ""))
         if not agent_path.exists():
             raise HTTPException(status_code=400, detail="Agent files not found")
-        
+
         main_file = agent_path / agent["main_file"]
         if not main_file.exists():
             raise HTTPException(status_code=400, detail=f"Main file not found: {agent['main_file']}")
-        
+
         # Execute agent with Norn monitoring
         # For now, we'll create a basic session entry and mark it as running
         # The actual execution will be handled by a background process
@@ -1181,20 +1188,28 @@ def run_agent(agent_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
             "efficiency_score": None,
             "security_score": None,
         }
-        
+
         # Save initial session
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
         session_file = SESSIONS_DIR / f"{session_id}.json"
         _atomic_write_json(session_file, session_data)
 
-        # Update agent status
-        for a in agents:
-            if a["id"] == agent_id:
-                a["status"] = "running"
-                a["last_run"] = datetime.now().isoformat()
-                break
-        
-        _atomic_write_json(REGISTRY_FILE, agents)
+        # Update agent status — under lock to prevent concurrent run clobber
+        _aid = agent_id
+        with _registry_lock:
+            _agents = []
+            if REGISTRY_FILE.exists():
+                try:
+                    with open(REGISTRY_FILE) as f:
+                        _agents = json.load(f)
+                except (json.JSONDecodeError, OSError):
+                    _agents = []
+            for a in _agents:
+                if a["id"] == _aid:
+                    a["status"] = "running"
+                    a["last_run"] = datetime.now().isoformat()
+                    break
+            _atomic_write_json(REGISTRY_FILE, _agents)
 
         # Start background execution
         import threading
@@ -1666,15 +1681,16 @@ def _execute_agent_background(agent_id: str, session_id: str, agent_path: str, m
 def _reset_agent_status(agent_id: str):
     """Reset agent status back to 'analyzed' so it can be run again."""
     try:
-        if REGISTRY_FILE.exists():
-            with open(REGISTRY_FILE) as f:
-                agents = json.load(f)
-            for agent in agents:
-                if agent["id"] == agent_id:
-                    agent["status"] = "analyzed"
-                    agent["last_run"] = datetime.now().isoformat()
-                    break
-            _atomic_write_json(REGISTRY_FILE, agents)
+        with _registry_lock:
+            if REGISTRY_FILE.exists():
+                with open(REGISTRY_FILE) as f:
+                    agents = json.load(f)
+                for agent in agents:
+                    if agent["id"] == agent_id:
+                        agent["status"] = "analyzed"
+                        agent["last_run"] = datetime.now().isoformat()
+                        break
+                _atomic_write_json(REGISTRY_FILE, agents)
     except Exception:
         pass
 
@@ -1686,18 +1702,20 @@ def delete_agent(agent_id: str) -> Dict[str, str]:
         raise HTTPException(status_code=404, detail="No agents registered")
     
     try:
-        with open(REGISTRY_FILE) as f:
-            agents = json.load(f)
-        
-        agent = next((a for a in agents if a["id"] == agent_id), None)
-        if not agent:
-            raise HTTPException(status_code=404, detail="Agent not found")
-        
-        # Remove from registry
-        agents = [a for a in agents if a["id"] != agent_id]
-        _atomic_write_json(REGISTRY_FILE, agents)
+        with _registry_lock:
+            with open(REGISTRY_FILE) as f:
+                agents = json.load(f)
+            
+            agent = next((a for a in agents if a["id"] == agent_id), None)
+            if not agent:
+                raise HTTPException(status_code=404, detail="Agent not found")
+            
+            # Remove from registry
+            agents = [a for a in agents if a["id"] != agent_id]
+            _atomic_write_json(REGISTRY_FILE, agents)
 
         # Clean up temp files — only for git/zip agents, never for hook agents
+        # (done outside the lock since it can be slow)
         if agent.get("source") == "git":
             path = Path(agent.get("clone_path", ""))
             if path and path.exists():
@@ -1969,43 +1987,44 @@ def register_hook_agent(data: Dict[str, Any]) -> Dict[str, Any]:
     if not name:
         raise HTTPException(status_code=400, detail="name is required")
 
-    REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    agents: List[Dict[str, Any]] = []
-    if REGISTRY_FILE.exists():
-        try:
-            with open(REGISTRY_FILE) as f:
-                agents = json.load(f)
-        except Exception:
-            agents = []
+    with _registry_lock:
+        REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        agents: List[Dict[str, Any]] = []
+        if REGISTRY_FILE.exists():
+            try:
+                with open(REGISTRY_FILE) as f:
+                    agents = json.load(f)
+            except Exception:
+                agents = []
 
-    # Return existing hook agent with this name
-    for agent in agents:
-        if agent.get("name") == name and agent.get("source") == "hook":
-            return agent
+        # Return existing hook agent with this name
+        for agent in agents:
+            if agent.get("name") == name and agent.get("source") == "hook":
+                return agent
 
-    # Create new hook agent entry
-    agent_id = f"hook-{datetime.now().strftime('%Y%m%d%H%M%S')}-{name.lower().replace(' ', '_')[:20]}"
-    agent_info: Dict[str, Any] = {
-        "id": agent_id,
-        "name": name,
-        "source": "hook",
-        "source_file": data.get("source_file", "unknown.py"),
-        "task_description": data.get("task_description", f"Live monitoring: {name}"),
-        "added_at": datetime.now().isoformat(),
-        "status": "analyzed",
-        "discovery": {
-            "agent_type": "Hook Agent",
-            "tools": [],
-            "functions": [],
-            "imports": [],
-            "dependencies": [],
-            "potential_issues": [],
-            "entry_points": [],
-        },
-    }
+        # Create new hook agent entry
+        agent_id = f"hook-{datetime.now().strftime('%Y%m%d%H%M%S')}-{name.lower().replace(' ', '_')[:20]}"
+        agent_info: Dict[str, Any] = {
+            "id": agent_id,
+            "name": name,
+            "source": "hook",
+            "source_file": data.get("source_file", "unknown.py"),
+            "task_description": data.get("task_description", f"Live monitoring: {name}"),
+            "added_at": datetime.now().isoformat(),
+            "status": "analyzed",
+            "discovery": {
+                "agent_type": "Hook Agent",
+                "tools": [],
+                "functions": [],
+                "imports": [],
+                "dependencies": [],
+                "potential_issues": [],
+                "entry_points": [],
+            },
+        }
 
-    agents.append(agent_info)
-    _atomic_write_json(REGISTRY_FILE, agents)
+        agents.append(agent_info)
+        _atomic_write_json(REGISTRY_FILE, agents)
 
     logger.info("Hook agent registered: %s (%s)", name, agent_id)
     return agent_info

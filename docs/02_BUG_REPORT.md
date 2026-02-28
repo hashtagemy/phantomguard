@@ -143,73 +143,30 @@ def safe_extract(zip_ref, extract_path):
 
 ## ⚠️ ORTA SEVİYE BUGLAR (Severity: MEDIUM)
 
-### BUG-006: Session JSON Dosyalarında Race Condition
+### ~~BUG-006: Session JSON Dosyalarında Race Condition~~ ✅ ÇÖZÜLDÜ
 
 **Dosya:** `norn/api.py`, çeşitli yerler  
 **Etki:** Veri kaybı veya bozulması
 
-Session dosyaları `_atomic_write_json()` ile yazılıyor (iyi), **ama** bazı yerlerde hâlâ standart `json.dump()` kullanılıyor:
-
-```python
-# Satır 1175-1176 — Atomik DEĞİL
-with open(session_file, 'w') as f:
-    json.dump(session_data, f, indent=2)
-
-# Satır 1590-1591 — Atomik DEĞİL
-with open(session_file, 'w') as f:
-    json.dump(session, f, indent=2)
-
-# Satır 1613-1614 — Atomik DEĞİL
-with open(session_file, 'w') as f:
-    json.dump(session, f, indent=2)
-```
-
-Background thread session dosyasını yazarken WebSocket handler'ı aynı dosyayı okumaya çalışabilir.
-
-**Düzeltme:** Tüm session yazma işlemlerini `_atomic_write_json()` ile değiştirin.
+**Durum:** Tüm session yazma işlemleri artık `_atomic_write_json()` kullanıyor. Hiçbir yerde doğrudan `json.dump(session, ...)` kalmadı.
 
 ---
 
-### BUG-007: Agent Registry Dosyasında Lock Mekanizması Yok
+### ~~BUG-007: Agent Registry Dosyasında Lock Mekanizması Yok~~ ✅ ÇÖZÜLDÜ
 
 **Dosya:** `norn/api.py`, çeşitli endpoint'ler  
 **Etki:** Aynı anda iki agent import edildiğinde veri kaybı
 
-```python
-# Birden fazla endpoint aynı anda registry dosyasını oku-değiştir-yaz yapıyor
-with open(REGISTRY_FILE) as f:
-    agents = json.load(f)
-agents.append(agent_info)
-with open(REGISTRY_FILE, 'w') as f:
-    json.dump(agents, f, indent=2)
-```
-
-**Problem:** İki paralel isteğin her ikisi de dosyayı okuduğunda, ilk yazanın değişiklikleri ikinci tarafından üzerine yazılır. Threading lock veya dosya kilidi gerekli.
+**Durum:** `_registry_lock = threading.Lock()` eklendi. Tüm registry read-modify-write blokları (`import_github_agent`, `import_zip_agent`, `run_agent`, `delete_agent`, `register_hook_agent`, `_reset_agent_status`) artık `_registry_lock` altında çalışıyor. Salt okunur erişimler `_read_registry()` helper'ı ile yapılıyor.
 
 ---
 
-### BUG-008: Agent Discovery'de `_find_functions()` AsyncFunctionDef'i Yakalamıyor
+### ~~BUG-008: Agent Discovery'de `_find_functions()` AsyncFunctionDef'i Yakalamıyor~~ ✅ ÇÖZÜLDÜ
 
-**Dosya:** `norn/utils/agent_discovery.py`, satır 205-220  
-**Etki:** Async fonksiyonlar "is_async: False" olarak raporlanıyor
+**Dosya:** `norn/utils/agent_discovery.py`, satır 210  
+**Etki:** Async fonksiyonlar "is_async: False" olarak raporlanıyordu
 
-```python
-def _find_functions(self, tree: ast.AST) -> List[Dict[str, Any]]:
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef):    # ← AsyncFunctionDef'i YAKALAMIYOR
-            ...
-            functions.append({
-                ...
-                "is_async": isinstance(node, ast.AsyncFunctionDef)  # HER ZAMAN False
-            })
-```
-
-**Problem:** `isinstance(node, ast.FunctionDef)` koşulu `ast.AsyncFunctionDef`'i **yakalamaz** çünkü Python 3.10+'da `AsyncFunctionDef`, `FunctionDef`'in alt sınıfı değildir. `is_async` her zaman `False` döner.
-
-**Düzeltme Önerisi:**
-```python
-if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-```
+**Durum:** Kod zaten `isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))` kullanıyor. `is_async` alanı doğru şekilde `isinstance(node, ast.AsyncFunctionDef)` ile hesaplanıyor.
 
 ---
 
@@ -228,29 +185,12 @@ if 'from strands import agent' in code_lower:
 
 ---
 
-### BUG-010: `_extract_tool_name()` None Dönebilir Ama Type Hint String
+### ~~BUG-010: `_extract_tool_name()` None Dönebilir Ama Type Hint String~~ ✅ ÇÖZÜLDÜ
 
-**Dosya:** `norn/utils/agent_discovery.py`, satır 196-203  
-**Etki:** `NoneType` tool listesine ekleniyor
+**Dosya:** `norn/utils/agent_discovery.py`, satır 196  
+**Etki:** Tip anotasyonu yanlıştı
 
-```python
-def _extract_tool_name(self, node: ast.AST) -> str:  # str dönüyor ama...
-    if isinstance(node, ast.Name):
-        return node.id
-    elif isinstance(node, ast.Call):
-        if isinstance(node.func, ast.Name):
-            return node.func.id
-    return None      # ← None dönüyor! str değil!
-```
-
-Bu fonksiyon `_find_external_tools()`'da kullanılıyor:
-```python
-tool_name = self._extract_tool_name(tool)
-if tool_name:                              # ← None kontrolü var, iyi
-    tools.append({"name": tool_name, ...})
-```
-
-None kontrolü var ama tip anotasyonu yanlış. MyPy/Pyright bunu yakalayamaz.
+**Durum:** Tip anotasyonu `Optional[str]` olarak düzeltilmiş. Fonksiyon imzası artık `def _extract_tool_name(self, node: ast.AST) -> Optional[str]`.
 
 ---
 
@@ -283,55 +223,41 @@ REST endpoint'ler `Depends(verify_api_key)` ile korunan ama WebSocket bağlantı
 
 ---
 
-### BUG-013: `_save_config()` Atomik Değil
+### ~~BUG-013: `_save_config()` Atomik Değil~~ ✅ ÇÖZÜLDÜ
 
-**Dosya:** `norn/api.py`, satır 136-139  
-**Etki:** Konfigürasyon dosyası bozulabilir
+**Dosya:** `norn/api.py`, satır 170-172  
+**Etki:** Konfigürasyon dosyası bozulabiliyordu
 
-```python
-def _save_config(config: Dict[str, Any]) -> None:
-    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(CONFIG_FILE, "w") as f:   # ← Atomik değil
-        json.dump(config, f, indent=2)
-```
-
-`_atomic_write_json()` fonksiyonu zaten mevcut ama burada kullanılmıyor.
+**Durum:** `_save_config()` artık `_atomic_write_json(CONFIG_FILE, config)` kullanıyor.
 
 ---
 
 ## 📋 DÜŞÜK SEVİYE BUGLAR (Severity: LOW)
 
-### BUG-014: `.env` Dosyası Git'te
+### ~~BUG-014: `.env` Dosyası Git'te~~ ✅ ÇÖZÜLDÜ (dosya kaldırıldı)
 
 **Dosya:** `.gitignore` satır 28  
 **Etki:** git geçmişinde credential sızıntısı riski
 
-`.gitignore`'da `.env` ignore ediliyor, ama projenin kök dizininde `.env` dosyası mevcut (3880 byte). Bu dosya doğru şekilde gitignore'a eklenmiş **AMA** halihazırda git geçmişine commit edilmiş olabilir.
+**Durum:** `.env` dosyası proje kökünde artık mevcut değil.
 
 ---
 
-### BUG-015: `appointments.db` ve `result.txt` Proje Kökünde
+### ~~BUG-015: `appointments.db` ve `result.txt` Proje Kökünde~~ ✅ ÇÖZÜLDÜ (dosyalar kaldırıldı)
 
 **Dosya:** Proje kök dizini  
 **Etki:** Çalışma alanı izolasyonu ihlali
 
-`appointments.db` (12KB) ve `result.txt` proje kökünde mevcut. Bu dosyaların `norn_logs/workspace/{session_id}/` altında olması gerekiyor. Muhtemelen workspace izolasyonu eklenmeden önceki eski çalıştırmalardan kalmış.
+**Durum:** `appointments.db` ve `result.txt` artık proje kökünde mevcut değil.
 
 ---
 
-### BUG-016: `import_zip_agent` Aynı Anda İki ZIP Yüklendiğinde ID Çakışması
+### ~~BUG-016: `import_zip_agent` Aynı Anda İki ZIP Yüklendiğinde ID Çakışması~~ ✅ ÇÖZÜLDÜ
 
-**Dosya:** `norn/api.py`, satır 1086  
-**Etki:** Aynı saniyede iki ZIP yüklendiğinde aynı ID üretilir
+**Dosya:** `norn/api.py`, satır 1110  
+**Etki:** Aynı saniyede iki ZIP yüklendiğinde aynı ID üretiliyordu
 
-```python
-agent_info = {
-    "id": f"zip-{datetime.now().strftime('%Y%m%d%H%M%S')}",
-    ...
-}
-```
-
-GitHub import'ta bu sorun UUID veya benzersiz stem ile çözülmüş ama ZIP import'ta çözülmemiş.
+**Durum:** ZIP agent ID'si artık `f"zip-{uuid.uuid4().hex[:12]}"` kullanarak UUID tabanlı benzersiz ID üretiyor.
 
 ---
 
@@ -391,54 +317,48 @@ Aynı konseptler (Session, Issue, Step) her iki dosyada da tanımlanıyor:
 
 ---
 
-### BUG-021: `_find_entry_points()` 'da `ast.Eq` Kontrolü Çok Geniş
+### ~~BUG-021: `_find_entry_points()` 'da `ast.Eq` Kontrolü Çok Geniş~~ ✅ ÇÖZÜLDÜ
 
-**Dosya:** `norn/utils/agent_discovery.py`, satır 291-293  
+**Dosya:** `norn/utils/agent_discovery.py`, satır 290-298  
 **Etki:** False positive entry point tespiti
 
-```python
-if isinstance(node.test, ast.Compare):
-    if any(isinstance(comp, ast.Eq) for comp in node.test.ops):
-        entry_points.append("__main__")
-```
-
-Bu kontrol herhangi bir `==` karşılaştırmasını `if __name__ == "__main__"` olarak algılar. Örneğin `if x == 5:` bile `__main__` entry point olarak raporlanır.
-
-**Düzeltme:**
-```python
-if (isinstance(node.test, ast.Compare) and
-    isinstance(node.test.left, ast.Name) and
-    node.test.left.id == "__name__" and
-    any(isinstance(comp, ast.Eq) for comp in node.test.ops)):
-    entry_points.append("__main__")
-```
-
-Not: `_is_agent_file()` (`api.py` satır 816-821) bu kontrolü doğru yapıyor.
+**Durum:** `_find_entry_points()` artık tam doğrulama yapıyor: `isinstance(node.test.left, ast.Name)`, `node.test.left.id == "__name__"`, `isinstance(node.test.comparators[0], ast.Constant)`, ve `node.test.comparators[0].value == "__main__"` kontrolleri mevcut.
 
 ---
 
 ## 📊 Bug Özet Tablosu
 
-| ID | Severity | Dosya | Kısa Açıklama |
-|---|---|---|---|
-| ~~BUG-001~~ | ~~🔴 HIGH~~ | interceptor.py | ~~asyncio.create_task() event loop olmadan~~ ✅ |
-| ~~BUG-002~~ | ~~🔴 HIGH~~ | api.py | ~~os.chdir() thread-safety sorunu~~ ✅ |
-| ~~BUG-003~~ | ~~🔴 HIGH~~ | api.py | ~~sys.path kirlenmesi~~ ✅ |
-| ~~BUG-004~~ | ~~🔴 HIGH~~ | api.py | ~~--break-system-packages güvenlik riski~~ ✅ |
-| ~~BUG-005~~ | ~~🔴 HIGH~~ | api.py | ~~ZIP path traversal güvenlik açığı~~ ✅ |
-| BUG-006 | 🟡 MEDIUM | api.py | Session yazma race condition |
-| BUG-007 | 🟡 MEDIUM | api.py | Registry dosya kilidi eksik |
-| BUG-008 | 🟡 MEDIUM | agent_discovery.py | AsyncFunctionDef yakalanmıyor |
-| BUG-009 | 🟡 MEDIUM | agent_discovery.py | Agent tipi algılama eksiklikleri |
-| BUG-010 | 🟡 MEDIUM | agent_discovery.py | Yanlış tip anotasyonu |
-| BUG-011 | 🟡 MEDIUM | api.py | Temp dizin temizleme eksik |
-| ~~BUG-012~~ | ~~🟡 MEDIUM~~ | api.py | ~~WebSocket auth bypass~~ ✅ |
-| BUG-013 | 🟡 MEDIUM | api.py | Config yazma atomik değil |
-| BUG-014 | 🟢 LOW | .env | Olası credential sızıntısı |
-| BUG-015 | 🟢 LOW | root/ | Workspace izolasyon ihlali |
-| BUG-016 | 🟢 LOW | api.py | ZIP agent ID çakışması |
-| BUG-017 | 🟢 LOW | agent_runner.py | Eski Hook API kullanımı |
-| BUG-018 | 🟢 LOW | quality_evaluator.py | Division by zero edge case |
-| BUG-019 | 🟢 LOW | App.tsx | Type-safety bypass |
-| BUG-020 | 🟢 LOW | types.ts / api.ts | Çift tip tanımlama |
-| BUG-021 | 🟢 LOW | agent_discovery.py | Entry point false positive |
+| ID | Severity | Dosya | Kısa Açıklama | Durum |
+|---|---|---|---|---|
+| ~~BUG-001~~ | ~~🔴 HIGH~~ | interceptor.py | ~~asyncio.create_task() event loop olmadan~~ | ✅ Çözüldü |
+| ~~BUG-002~~ | ~~🔴 HIGH~~ | api.py | ~~os.chdir() thread-safety sorunu~~ | ✅ Çözüldü |
+| ~~BUG-003~~ | ~~🔴 HIGH~~ | api.py | ~~sys.path kirlenmesi~~ | ✅ Çözüldü |
+| ~~BUG-004~~ | ~~🔴 HIGH~~ | api.py | ~~--break-system-packages güvenlik riski~~ | ✅ Çözüldü |
+| ~~BUG-005~~ | ~~🔴 HIGH~~ | api.py | ~~ZIP path traversal güvenlik açığı~~ | ✅ Çözüldü |
+| ~~BUG-006~~ | ~~🟡 MEDIUM~~ | api.py | ~~Session yazma race condition~~ | ✅ Çözüldü |
+| ~~BUG-007~~ | ~~🟡 MEDIUM~~ | api.py | ~~Registry dosya kilidi eksik~~ | ✅ Çözüldü |
+| ~~BUG-008~~ | ~~🟡 MEDIUM~~ | agent_discovery.py | ~~AsyncFunctionDef yakalanmıyor~~ | ✅ Çözüldü |
+| BUG-009 | 🟡 MEDIUM | agent_discovery.py | Agent tipi algılama eksiklikleri | ⚠️ Açık |
+| ~~BUG-010~~ | ~~🟡 MEDIUM~~ | agent_discovery.py | ~~Yanlış tip anotasyonu~~ | ✅ Çözüldü |
+| BUG-011 | 🟡 MEDIUM | api.py | Temp dizin temizleme eksik | ⚠️ Açık |
+| ~~BUG-012~~ | ~~🟡 MEDIUM~~ | api.py | ~~WebSocket auth bypass~~ | ✅ Çözüldü |
+| ~~BUG-013~~ | ~~🟡 MEDIUM~~ | api.py | ~~Config yazma atomik değil~~ | ✅ Çözüldü |
+| ~~BUG-014~~ | ~~🟢 LOW~~ | .env | ~~Olası credential sızıntısı~~ | ✅ Dosya kaldırıldı |
+| ~~BUG-015~~ | ~~🟢 LOW~~ | root/ | ~~Workspace izolasyon ihlali~~ | ✅ Dosyalar kaldırıldı |
+| ~~BUG-016~~ | ~~🟢 LOW~~ | api.py | ~~ZIP agent ID çakışması~~ | ✅ Çözüldü |
+| BUG-017 | 🟢 LOW | agent_runner.py | Eski Hook API kullanımı | ⚠️ Açık |
+| BUG-018 | 🟢 LOW | quality_evaluator.py | Division by zero edge case | 🔵 Korumalı |
+| BUG-019 | 🟢 LOW | App.tsx | Type-safety bypass | ⚠️ Açık |
+| BUG-020 | 🟢 LOW | types.ts / api.ts | Çift tip tanımlama | ⚠️ Açık |
+| ~~BUG-021~~ | ~~🟢 LOW~~ | agent_discovery.py | ~~Entry point false positive~~ | ✅ Çözüldü |
+
+---
+
+## 📈 Genel Durum
+
+- **Toplam:** 21 bug
+- **Çözülen:** 16 (BUG-001–008, 010, 012–016, 021)
+- **Açık kalan:** 5 (BUG-009, 011, 017, 019, 020)
+  - **Gerçek bug:** BUG-009 (agent tipi algılama), BUG-011 (temp dizin temizleme)
+  - **Eski/bakım:** BUG-017 (eski Hook API), BUG-019/020 (frontend tip sorunları)
+- **Korumalı edge case:** BUG-018 (pratikte tetiklenmez)
