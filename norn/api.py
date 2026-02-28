@@ -1048,8 +1048,13 @@ def import_github_agent(data: Dict[str, Any]) -> List[Dict[str, Any]]:
         return created_agents
 
     except subprocess.TimeoutExpired:
+        # BUG-011: clean up temp_dir on failure so /tmp doesn't fill up
+        if 'temp_dir' in locals():
+            shutil.rmtree(temp_dir, ignore_errors=True)
         raise HTTPException(status_code=408, detail="Clone timeout")
     except Exception as e:
+        if 'temp_dir' in locals():
+            shutil.rmtree(temp_dir, ignore_errors=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1143,6 +1148,9 @@ async def import_zip_agent(file: UploadFile = File(...), agent_name: str = Form(
         return agent_info
 
     except Exception as e:
+        # BUG-011: clean up temp_dir on failure
+        if 'temp_dir' in locals():
+            shutil.rmtree(temp_dir, ignore_errors=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1716,14 +1724,19 @@ def delete_agent(agent_id: str) -> Dict[str, str]:
 
         # Clean up temp files — only for git/zip agents, never for hook agents
         # (done outside the lock since it can be slow)
+        # BUG-011: delete the parent temp_dir, not just clone_path/extract_path
         if agent.get("source") == "git":
             path = Path(agent.get("clone_path", ""))
-            if path and path.exists():
-                shutil.rmtree(path, ignore_errors=True)
+            # clone_path is temp_dir/agent_repo — delete temp_dir (parent)
+            cleanup_dir = path.parent if path and path.parent.name else path
+            if cleanup_dir and cleanup_dir.exists():
+                shutil.rmtree(cleanup_dir, ignore_errors=True)
         elif agent.get("source") == "zip":
             path = Path(agent.get("extract_path", ""))
-            if path and path.exists():
-                shutil.rmtree(path, ignore_errors=True)
+            # extract_path is temp_dir/agent_files — delete temp_dir (parent)
+            cleanup_dir = path.parent if path and path.parent.name else path
+            if cleanup_dir and cleanup_dir.exists():
+                shutil.rmtree(cleanup_dir, ignore_errors=True)
         
         return {"status": "deleted", "id": agent_id}
     
