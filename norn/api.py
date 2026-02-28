@@ -2359,4 +2359,7 @@ def get_swarm(swarm_id: str) -> dict:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # host="::" → dual-stack socket: hem IPv4 (127.0.0.1) hem IPv6 (::1) dinler.
+    # macOS'ta browser localhost'u ::1 (IPv6) olarak çözümleyebiliyor;
+    # 0.0.0.0 sadece IPv4 bağlıyor, bu yüzden health-check başarısız oluyordu.
+    uvicorn.run(app, host="::", port=8000)
