@@ -7,7 +7,7 @@ Analyzes agent code to discover capabilities, tools, and potential issues
 import ast
 import inspect
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 import importlib.util
 import sys
 
@@ -100,7 +100,7 @@ class AgentDiscovery:
         tools = []
         
         for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 # Check for @tool decorator
                 has_tool_decorator = any(
                     (isinstance(d, ast.Name) and d.id == 'tool') or
@@ -193,7 +193,7 @@ class AgentDiscovery:
         
         return tools
     
-    def _extract_tool_name(self, node: ast.AST) -> str:
+    def _extract_tool_name(self, node: ast.AST) -> Optional[str]:
         """Extract tool name from AST node"""
         if isinstance(node, ast.Name):
             return node.id
@@ -207,9 +207,9 @@ class AgentDiscovery:
         functions = []
         
         for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 docstring = ast.get_docstring(node) or ""
-                
+
                 functions.append({
                     "name": node.name,
                     "description": docstring.split('\n')[0] if docstring else "",
@@ -282,15 +282,20 @@ class AgentDiscovery:
         entry_points = []
         
         for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if node.name in ['main', 'run', 'start', 'execute']:
                     entry_points.append(node.name)
-            
+
             # Check for if __name__ == "__main__"
             if isinstance(node, ast.If):
-                if isinstance(node.test, ast.Compare):
-                    if any(isinstance(comp, ast.Eq) for comp in node.test.ops):
-                        entry_points.append("__main__")
+                if (isinstance(node.test, ast.Compare) and
+                        isinstance(node.test.left, ast.Name) and
+                        node.test.left.id == "__name__" and
+                        len(node.test.comparators) == 1 and
+                        isinstance(node.test.comparators[0], ast.Constant) and
+                        node.test.comparators[0].value == "__main__" and
+                        any(isinstance(op, ast.Eq) for op in node.test.ops)):
+                    entry_points.append("__main__")
         
         # Check for Agent instance
         for node in ast.walk(tree):

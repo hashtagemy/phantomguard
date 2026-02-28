@@ -18,11 +18,13 @@ import sys
 import tempfile
 import shutil
 import asyncio
+import uuid
+import zipfile
 
 logger = logging.getLogger("norn.api")
 
 
-def _atomic_write_json(path: Path, data: dict) -> None:
+def _atomic_write_json(path: Path, data: Any) -> None:
     """Write JSON to a file atomically via a temp file + rename.
     Prevents 0-byte files if the process is killed mid-write."""
     tmp_fd, tmp_path = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
@@ -36,6 +38,17 @@ def _atomic_write_json(path: Path, data: dict) -> None:
         except OSError:
             pass
         raise
+
+
+def _safe_extract(zip_ref: zipfile.ZipFile, extract_path: Path) -> None:
+    """Extract ZIP safely — prevents path traversal attacks (../../etc/passwd style).
+    BUG-005 fix: validates every member path stays within extract_path."""
+    resolved_base = extract_path.resolve()
+    for member in zip_ref.namelist():
+        member_path = (extract_path / member).resolve()
+        if not str(member_path).startswith(str(resolved_base) + os.sep) and member_path != resolved_base:
+            raise ValueError(f"ZIP path traversal attempt detected: {member}")
+    zip_ref.extractall(extract_path)
 
 app = FastAPI(title="Norn API", version="1.0.0")
 
@@ -135,8 +148,7 @@ def _load_config() -> Dict[str, Any]:
 
 def _save_config(config: Dict[str, Any]) -> None:
     CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(config, f, indent=2)
+    _atomic_write_json(CONFIG_FILE, config)
 
 
 @app.get("/")
@@ -1017,8 +1029,7 @@ def import_github_agent(data: Dict[str, Any]) -> List[Dict[str, Any]]:
             created_agents.append(agent_info)
 
         # Write registry once after all agents are processed
-        with open(REGISTRY_FILE, 'w') as f:
-            json.dump(agents_list, f, indent=2)
+        _atomic_write_json(REGISTRY_FILE, agents_list)
 
         return created_agents
 
@@ -1033,9 +1044,8 @@ async def import_zip_agent(file: UploadFile = File(...), agent_name: str = Form(
     """Import agent from uploaded ZIP file"""
     
     try:
-        import zipfile
         import io
-        
+
         # Read uploaded file
         file_content = await file.read()
         
@@ -1044,10 +1054,10 @@ async def import_zip_agent(file: UploadFile = File(...), agent_name: str = Form(
         extract_path = temp_dir / "agent_files"
         extract_path.mkdir(parents=True, exist_ok=True)
         
-        # Extract ZIP
+        # Extract ZIP (BUG-005: safe extract prevents path traversal attacks)
         zip_buffer = io.BytesIO(file_content)
         with zipfile.ZipFile(zip_buffer, 'r') as zip_ref:
-            zip_ref.extractall(extract_path)
+            _safe_extract(zip_ref, extract_path)
         
         # Auto-detect main file if not provided
         if not main_file:
@@ -1083,7 +1093,7 @@ async def import_zip_agent(file: UploadFile = File(...), agent_name: str = Form(
 
         # Create agent entry
         agent_info = {
-            "id": f"zip-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+            "id": f"zip-{uuid.uuid4().hex[:12]}",
             "name": agent_name,
             "source": "zip",
             "main_file": main_file,
@@ -1111,9 +1121,7 @@ async def import_zip_agent(file: UploadFile = File(...), agent_name: str = Form(
                 agents = json.load(f)
 
         agents.append(agent_info)
-
-        with open(REGISTRY_FILE, 'w') as f:
-            json.dump(agents, f, indent=2)
+        _atomic_write_json(REGISTRY_FILE, agents)
 
         return agent_info
 
@@ -1172,9 +1180,8 @@ def run_agent(agent_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         # Save initial session
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
         session_file = SESSIONS_DIR / f"{session_id}.json"
-        with open(session_file, 'w') as f:
-            json.dump(session_data, f, indent=2)
-        
+        _atomic_write_json(session_file, session_data)
+
         # Update agent status
         for a in agents:
             if a["id"] == agent_id:
@@ -1182,9 +1189,8 @@ def run_agent(agent_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
                 a["last_run"] = datetime.now().isoformat()
                 break
         
-        with open(REGISTRY_FILE, 'w') as f:
-            json.dump(agents, f, indent=2)
-        
+        _atomic_write_json(REGISTRY_FILE, agents)
+
         # Start background execution
         import threading
         thread = threading.Thread(
@@ -1317,7 +1323,7 @@ def _execute_agent_background(agent_id: str, session_id: str, agent_path: str, m
         req_file = repo_root_obj / "requirements.txt"
         agent_req_file = agent_path_obj / "requirements.txt"
 
-        pip_base = [sys.executable, "-m", "pip", "install", "-q", "--break-system-packages"]
+        pip_base = [sys.executable, "-m", "pip", "install", "-q", "--user"]
 
         def _run_pip(args: list, label: str) -> None:
             result = subprocess.run(pip_base + args, capture_output=True, text=True, timeout=120)
@@ -1587,8 +1593,7 @@ def _execute_agent_background(agent_id: str, session_id: str, agent_path: str, m
                 os.chdir(_original_cwd)
         
         # Save session
-        with open(session_file, 'w') as f:
-            json.dump(session, f, indent=2)
+        _atomic_write_json(session_file, session)
 
         logger.info(f"Session {session_id} saved successfully")
 
@@ -1609,9 +1614,7 @@ def _execute_agent_background(agent_id: str, session_id: str, agent_path: str, m
             "description": "Agent execution exceeded 5 minute timeout",
             "recommendation": "Optimize agent or increase timeout"
         })
-
-        with open(session_file, 'w') as f:
-            json.dump(session, f, indent=2)
+        _atomic_write_json(session_file, session)
 
         logger.info(f"Session {session_id} timed out")
         _reset_agent_status(agent_id)
@@ -1635,9 +1638,7 @@ def _execute_agent_background(agent_id: str, session_id: str, agent_path: str, m
                 "description": f"Fatal error: {str(e)}",
                 "recommendation": "Check logs for details"
             })
-
-            with open(session_file, 'w') as f:
-                json.dump(session, f, indent=2)
+            _atomic_write_json(session_file, session)
         except Exception as save_err:
             logger.error(f"Failed to save error session: {save_err}")
 
@@ -1655,8 +1656,7 @@ def _reset_agent_status(agent_id: str):
                     agent["status"] = "analyzed"
                     agent["last_run"] = datetime.now().isoformat()
                     break
-            with open(REGISTRY_FILE, 'w') as f:
-                json.dump(agents, f, indent=2)
+            _atomic_write_json(REGISTRY_FILE, agents)
     except Exception:
         pass
 
@@ -1677,10 +1677,8 @@ def delete_agent(agent_id: str) -> Dict[str, str]:
         
         # Remove from registry
         agents = [a for a in agents if a["id"] != agent_id]
-        
-        with open(REGISTRY_FILE, 'w') as f:
-            json.dump(agents, f, indent=2)
-        
+        _atomic_write_json(REGISTRY_FILE, agents)
+
         # Clean up temp files — only for git/zip agents, never for hook agents
         if agent.get("source") == "git":
             path = Path(agent.get("clone_path", ""))
@@ -1883,6 +1881,12 @@ def update_config(data: Dict[str, Any]) -> Dict[str, Any]:
 @app.websocket("/ws/sessions")
 async def websocket_sessions(websocket: WebSocket):
     """WebSocket endpoint for real-time session updates"""
+    # BUG-012: Auth check — mirrors REST endpoint verify_api_key logic
+    if API_KEY:
+        api_key = websocket.query_params.get("api_key") or websocket.headers.get("x-api-key")
+        if api_key != API_KEY:
+            await websocket.close(code=4001, reason="Unauthorized")
+            return
     await manager.connect(websocket)
 
     try:
@@ -1983,8 +1987,7 @@ def register_hook_agent(data: Dict[str, Any]) -> Dict[str, Any]:
     }
 
     agents.append(agent_info)
-    with open(REGISTRY_FILE, "w") as f:
-        json.dump(agents, f, indent=2)
+    _atomic_write_json(REGISTRY_FILE, agents)
 
     logger.info("Hook agent registered: %s (%s)", name, agent_id)
     return agent_info
