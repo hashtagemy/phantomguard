@@ -752,7 +752,7 @@ class NornHook(HookProvider):
                 "swarm_order": self.swarm_order,
                 "handoff_input": self.handoff_input,
             })
-            # Step counter'ı mevcut adım sayısından devam ettir
+            # Resume the step counter from the existing step count
             if resp:
                 existing_steps = resp.get("steps") or []
                 self._existing_step_count = len(existing_steps)
