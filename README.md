@@ -249,42 +249,48 @@ python your_agent.py   # ← automatically monitored, no code changes
 ```
 
 ### 3. Multi-Agent Swarm
-Group multiple agents into a monitored pipeline with `swarm_id`:
+Monitor a pipeline of agents working together. Each agent gets its own hook —
+they are linked by a shared `swarm_id`. The dashboard groups them into a single
+pipeline card and calculates an alignment score across the chain.
 
 ```python
 from datetime import datetime
 from norn import NornHook
 from strands import Agent
 
-# Unique ID per run — keeps each pipeline execution separate on the dashboard
+# Generate a unique run ID for this pipeline execution.
+# Every agent in the same run must share this exact swarm_id.
+# The timestamp suffix ensures each run gets its own dashboard card.
 run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
 
-# Agent 1 — Researcher
+# ── Agent A — first step in the pipeline ─────────────────────────────────────
 hook_a = NornHook(
     norn_url="http://localhost:8000",
-    agent_name="Researcher",
-    swarm_id=f"research-pipeline-{run_id}",
-    swarm_order=1,
+    agent_name="Researcher",          # label shown on the dashboard
+    swarm_id=f"my-pipeline-{run_id}", # shared across all agents in this run
+    swarm_order=1,                    # position in the pipeline (1 = first)
 )
 agent_a = Agent(tools=[...], hooks=[hook_a])
 result_a = agent_a("Find recent AI safety research trends")
 
-# Agent 2 — Writer (receives output from Agent 1)
+# ── Agent B — second step, receives Agent A's output ─────────────────────────
 hook_b = NornHook(
     norn_url="http://localhost:8000",
     agent_name="Writer",
-    swarm_id=f"research-pipeline-{run_id}",
+    swarm_id=f"my-pipeline-{run_id}", # same run_id — links A and B together
     swarm_order=2,
-    handoff_input=str(result_a)[:500],
+    handoff_input=str(result_a)[:500], # data passed from A → shown on dashboard
 )
 agent_b = Agent(tools=[...], hooks=[hook_b])
 agent_b(f"Write a report based on: {result_a}")
 ```
 
-Both sessions appear together under **Swarm Monitor** in the dashboard, with an alignment score showing how closely Agent 2's task stayed on topic.
+Both sessions appear together under **Swarm Monitor** with an alignment score
+showing how closely Agent B's task stayed on topic relative to Agent A.
 
-> **`swarm_id`** must be the same for all agents in a run and unique per run.
-> Use a timestamp suffix so each pipeline execution gets its own dashboard card.
+> **`swarm_id`** must be identical for all agents in a run and unique per run.
+> **`swarm_order`** controls the visual order in the pipeline (1 = first agent).
+> **`handoff_input`** is optional — pass it to display inter-agent data on the dashboard.
 
 ---
 
