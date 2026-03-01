@@ -222,7 +222,7 @@ from strands import Agent
 guard = NornHook(
     norn_url="http://localhost:8000",
     agent_name="My Agent",
-    session_id="my-agent",          # Fixed ID — steps accumulate across restarts
+    session_id="my-agent",          
 )
 agent = Agent(tools=[...], hooks=[guard])
 agent("Your task")
@@ -245,23 +245,27 @@ agent("Your task")
 > Sessions are saved to `norn_logs/` but **not** pushed to the dashboard.
 > Use **Manual Hook** with `norn_url` for dashboard visibility.
 
-### 3. Global Monitoring *(local logging only)*
+### 3. Global Monitoring *(full dashboard integration)*
 ```python
 from norn.proxy import enable_global_monitoring
 
-enable_global_monitoring()
-# All Agent instances are now monitored automatically
+enable_global_monitoring(norn_url="http://localhost:8000")
+# All Agent instances are now monitored on the dashboard automatically
 ```
 
-> Sessions are saved locally. Use **Manual Hook** for dashboard integration.
+### 4. Environment Variable (Zero Code) *(full dashboard integration)*
 
-### 4. Environment Variable (Zero Code) *(local logging only)*
+Add to your `~/.zshrc` (or `~/.bashrc`) once — every agent you run is automatically tracked on the dashboard, no code changes needed:
+
 ```bash
 export NORN_AUTO_ENABLE=true
-python your_agent.py
+export NORN_URL=http://localhost:8000   # stream to dashboard
+export NORN_MODE=monitor               # monitor | intervene
 ```
 
-> Sessions are saved locally. Use **Manual Hook** for dashboard integration.
+```bash
+python your_agent.py   # ← automatically monitored, no code changes
+```
 
 ### 5. Multi-Agent Swarm
 Group multiple agents into a monitored pipeline with `swarm_id`:

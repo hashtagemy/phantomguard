@@ -92,67 +92,57 @@ class MonitoredAgent(Agent):
 # Monkey-patch: Replace Strands Agent globally
 def enable_global_monitoring(
     mode: str = "monitor",
-    auto_task_detection: bool = True
+    auto_task_detection: bool = True,
+    norn_url: Optional[str] = None,
 ):
     """
     Enable Norn for ALL agents in the application.
-    
+
     Call this once at the start of your application:
-    
+
     ```python
     from norn.proxy import enable_global_monitoring
-    
-    # Enable monitoring for all agents
-    enable_global_monitoring()
-    
-    # Now ALL Agent() calls are automatically monitored!
+
+    enable_global_monitoring(norn_url="http://localhost:8000")
+
+    # Now ALL Agent() calls are automatically monitored on the dashboard!
     from strands import Agent
     agent = Agent(...)  # ← Automatically monitored!
     ```
-    
+
     Args:
         mode: "monitor" or "intervene"
         auto_task_detection: Try to detect task from system prompt
+        norn_url: Dashboard API URL. If set, steps are streamed to the dashboard.
     """
     import strands
-    
+
     # Replace Agent class globally
     original_agent_init = strands.Agent.__init__
-    
+
     def monitored_init(self, *args, **kwargs):
-        # Add Norn automatically
         task = None
         if auto_task_detection and 'system_prompt' in kwargs:
-            # Try to extract task from system prompt
             task = TaskDefinition(description=kwargs['system_prompt'][:200])
-        
+
         guard = NornHook(
             task=task,
             mode=mode,
             enable_ai_eval=True,
+            norn_url=norn_url,
         )
-        
+
         existing_hooks = kwargs.get('hooks', [])
         kwargs['hooks'] = existing_hooks + [guard]
-        
-        # Store guard reference
+
         self._norn = guard
-        
-        # Call original init
         original_agent_init(self, *args, **kwargs)
-    
+
     # Monkey-patch
     strands.Agent.__init__ = monitored_init
-    strands.Agent.quality_report = property(lambda self: getattr(self, '_norn', None).session_report if hasattr(self, '_norn') and self._norn else None)
-    
+    strands.Agent.quality_report = property(
+        lambda self: getattr(self, '_norn', None).session_report
+        if hasattr(self, '_norn') and self._norn else None
+    )
+
     logger.info("Norn global monitoring enabled - ALL agents will be monitored")
-
-
-# BUG-v2-002 fix: Only auto-enable when explicitly run, not on import
-if __name__ == "__main__":
-    import os as _os
-    if _os.getenv("NORN_AUTO_ENABLE", "").lower() == "true":
-        enable_global_monitoring(
-            mode=_os.getenv("NORN_MODE", "monitor")
-        )
-        logger.info("Norn auto-enabled via environment variable")
