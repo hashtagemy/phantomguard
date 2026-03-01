@@ -11,6 +11,7 @@ React dashboard for the Norn AI agent monitoring platform.
 - **Real-Time Monitoring** — WebSocket-based live updates during execution
 - **Session History** — View all past executions with detailed reports
 - **AI Analysis** — Per-tool usage, decision observations, efficiency explanation
+- **Swarm Monitor** — Multi-agent pipeline view with alignment score and per-agent breakdown
 - **Browser Audit** — Nova Act shadow verification (requires `NOVA_ACT_API_KEY`)
 - **Configuration** — Adjust guard mode and thresholds from the UI
 
@@ -59,7 +60,7 @@ python -m norn.api
 | Endpoint | Method | Description |
 |---|---|---|
 | `/` | GET | Health check |
-| `/api/agents` | GET | List all agents |
+| `/api/agents` | GET | List all registered agents |
 | `/api/agents/import/github` | POST | Import agent from GitHub |
 | `/api/agents/import/zip` | POST | Import agent from ZIP file |
 | `/api/agents/:id` | GET | Get agent details |
@@ -68,8 +69,17 @@ python -m norn.api
 | `/api/agents/:id/run` | POST | Run agent with a task |
 | `/api/sessions` | GET | List all sessions |
 | `/api/sessions/:id` | GET | Get session details |
+| `/api/sessions/:id/step` | POST | Add a real-time execution step |
+| `/api/sessions/:id/complete` | POST | Mark session complete with final scores |
+| `/api/sessions/:id` | DELETE | Delete a session |
+| `/api/swarms` | GET | List all swarm groups |
+| `/api/swarms/:id` | GET | Get swarm details |
 | `/api/stats` | GET | Dashboard statistics |
-| `ws://localhost:8000/ws` | WebSocket | Live execution updates |
+| `/api/audit` | GET | Audit log entries |
+| `/api/browser-audit` | GET | Browser audit events |
+| `/api/config` | GET | Get current configuration |
+| `/api/config` | PUT | Update configuration |
+| `ws://localhost:8000/ws/sessions` | WebSocket | Live session & agent updates |
 
 ## Development
 

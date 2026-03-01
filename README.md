@@ -357,14 +357,21 @@ Both sessions appear together under **Swarm Monitor** in the dashboard, with an 
 
 | File | Purpose |
 |---|---|
-| `norn/api.py` | FastAPI server — REST + WebSocket + task generation + swarm endpoints |
-| `norn/core/interceptor.py` | Hook implementation — swarm_id/order support |
+| `norn/api.py` | FastAPI app factory — mounts all routers |
+| `norn/shared.py` | Global state: paths, locks, WebSocket manager, auth, atomic write |
+| `norn/proxy.py` | `MonitoredAgent` wrapper and `enable_global_monitoring()` |
+| `norn/core/interceptor.py` | Hook implementation — captures steps, swarm_id/order support |
 | `norn/core/step_analyzer.py` | Deterministic loop & drift detection |
-| `norn/core/audit_logger.py` | Structured JSON logging |
-| `norn/agents/quality_evaluator.py` | AI scoring via Amazon Nova |
-| `norn/agents/shadow_browser.py` | Nova Act browser verification |
-| `norn/utils/agent_discovery.py` | AST-based code analysis |
-| `norn/utils/agent_runner.py` | Agent execution harness |
+| `norn/core/audit_logger.py` | Structured JSON logging with pluggable backend |
+| `norn/agents/quality_evaluator.py` | AI scoring via Amazon Nova (real-time + deep eval) |
+| `norn/agents/shadow_browser.py` | Nova Act shadow browser verification |
+| `norn/execution/runner.py` | Agent execution harness (in-process & subprocess) |
+| `norn/execution/task_gen.py` | Smart test task generation via Nova Lite |
+| `norn/execution/discovery.py` | Lightweight AST-based agent discovery (fallback) |
+| `norn/utils/agent_discovery.py` | Full AST-based code analysis (tools, deps, entry points) |
+| `norn/import_utils/` | stdlib-only helpers for file detection and pyproject parsing |
+| `norn/models/schemas.py` | Pydantic data models (SessionReport, StepRecord, etc.) |
+| `norn/routers/` | 11 FastAPI routers: sessions, agents, swarms, audit, config, stats, websocket |
 | `norn-dashboard/components/SwarmView.tsx` | Swarm Monitor dashboard tab |
 
 ---
