@@ -224,6 +224,8 @@ IMPORTANT SCORING RULES:
 - task_completed = true if the PRIMARY task goal was achieved in any step, even if later steps were unnecessary. Unnecessary extra steps lower efficiency_score but must NOT flip task_completed to false.
 - For short conversational tasks (greetings, single questions, confirmations): if the agent gave an appropriate response in any step, set task_completed = true and overall_quality >= GOOD.
 - overall_quality = FAILED only when the agent completely ignored the task or caused a security breach.
+- Steps marked ⚠ (REDUNDANT) were flagged as possibly unnecessary by pattern detection, but they DID execute successfully. Do NOT treat ⚠ as failure. Set tool_analysis "usage" to "unnecessary" (not "incorrect") for ⚠ steps. Redundant steps lower efficiency_score slightly but must NOT affect task_completed.
+- If a step failed because a required environment variable or external service was not configured (e.g. missing knowledge base ID, missing API key), this is NOT the agent's fault. Note it in recommendations but do NOT lower task_completed or count it as a task failure. The agent should be credited for attempting the correct action.
 
 Evaluate the agent's performance across these dimensions:
 1. TASK COMPLETION: Did it complete the primary task goal? How confident are you?
@@ -287,7 +289,12 @@ Respond with JSON following the format in your system prompt."""
 
         lines = []
         for step in steps:
-            status_icon = "✓" if step.status.value == "SUCCESS" else "✗"
+            if step.status.value == "SUCCESS":
+                status_icon = "✓"
+            elif step.status.value == "REDUNDANT":
+                status_icon = "⚠"   # Executed successfully, but possibly unnecessary
+            else:
+                status_icon = "✗"   # Genuinely failed
             # "eval-timeout" makes it explicit to the session evaluator that N/A
             # means the scoring API timed out — NOT that the step was wrong.
             rel_str = f"{step.relevance_score}%" if step.relevance_score is not None else "eval-timeout"

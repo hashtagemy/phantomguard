@@ -78,18 +78,21 @@ def _mask_sensitive(data: dict[str, Any]) -> dict[str, Any]:
 class NornHook(HookProvider):
     """
     Quality monitoring hook for Strands agents.
-    
+
     Tracks every tool call, detects loops and inefficiencies,
     evaluates task completion with AI.
-    
+
     Args:
         task: Task description (string or TaskDefinition)
         mode: "monitor" (observe only) or "intervene" (can cancel stuck loops)
         max_steps: Maximum steps before intervention
         enable_ai_eval: Whether to use Nova Lite for quality evaluation
         on_issue: Optional callback for quality issues
+        loop_window: Number of recent steps to check for loop patterns
+        loop_threshold: Repetitions within window that trigger a loop alert
+        max_same_tool: Max times the same tool can be called in one session
     """
-    
+
     def __init__(
         self,
         task: str | TaskDefinition | None = None,
@@ -105,6 +108,9 @@ class NornHook(HookProvider):
         swarm_id: Optional[str] = None,       # Multi-agent swarm group ID
         swarm_order: Optional[int] = None,    # Position in swarm pipeline (1-based)
         handoff_input: Optional[str] = None,  # Data received from the previous agent
+        loop_window: int = 5,                 # StepAnalyzer: recent-step window size
+        loop_threshold: int = 3,              # StepAnalyzer: repetitions to trigger loop
+        max_same_tool: int = 10,             # StepAnalyzer: max calls per tool
     ):
         # Task definition
         if isinstance(task, str):
@@ -129,8 +135,12 @@ class NornHook(HookProvider):
         self.swarm_order = swarm_order
         self.handoff_input = handoff_input
 
-        # Components
-        self.step_analyzer = StepAnalyzer()
+        # Components — loop detection params flow from dashboard config
+        self.step_analyzer = StepAnalyzer(
+            loop_window=loop_window,
+            loop_threshold=loop_threshold,
+            max_same_tool=max_same_tool,
+        )
         self.audit = audit_logger if audit_logger else AuditLogger()
 
         # Dashboard integration

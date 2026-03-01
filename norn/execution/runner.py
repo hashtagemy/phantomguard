@@ -29,6 +29,7 @@ from norn.shared import (
     SESSIONS_DIR,
     _atomic_write_json,
     _chdir_lock,
+    _load_config,
     _registry_lock,
 )
 
@@ -145,11 +146,8 @@ def _execute_agent_background(
 
         session["workspace"] = str(workspace_dir)
 
-        # Load config
-        config: dict = {}
-        if CONFIG_FILE.exists():
-            with open(CONFIG_FILE) as f:
-                config = json.load(f)
+        # Load config — uses _load_config() so DEFAULT_CONFIG is always merged in
+        config = _load_config()
 
         audit_logger = AuditLogger()
         guard = NornHook(
@@ -158,6 +156,9 @@ def _execute_agent_background(
             max_steps=config.get("max_steps", 100),
             enable_ai_eval=config.get("enable_ai_eval", True),
             enable_shadow_browser=config.get("enable_shadow_browser", False),
+            loop_window=config.get("loop_window", 5),
+            loop_threshold=config.get("loop_threshold", 3),
+            max_same_tool=config.get("max_same_tool", 10),
             session_id=session_id,
             audit_logger=audit_logger,
         )
@@ -342,7 +343,7 @@ def _execute_agent_background(
                     **os.environ,
                     "NORN_SESSION_ID": session_id,
                     "NORN_ENABLED": "true",
-                    "NORN_MODE": config.get("mode", "monitor"),
+                    "NORN_MODE": config.get("guard_mode", "monitor"),
                     "NORN_TASK": task,
                     "NORN_WORKSPACE": str(workspace_dir),
                     "PYTHONPATH": cwd + os.pathsep + os.environ.get("PYTHONPATH", ""),
