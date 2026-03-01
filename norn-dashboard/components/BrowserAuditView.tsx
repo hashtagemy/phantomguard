@@ -25,7 +25,7 @@ function buildAuditEntries(sessions: Session[]): SessionAuditEntry[] {
       const urls: UrlEntry[] = [];
 
       for (const step of session.steps) {
-        if (step.type !== 'phantom_check') continue;
+        if (step.type !== 'norn_check') continue;
         const sv = step.metadata?.shadowVerification;
         if (!sv) continue;
 

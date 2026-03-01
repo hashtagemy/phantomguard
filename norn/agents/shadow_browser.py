@@ -171,6 +171,7 @@ class ShadowBrowser:
         return {
             "url": url,
             "verified": not bool(security_issues),
+            "discrepancy_detected": bool(security_issues),
             "verification_result": verification_result,
             "verification_method": "nova_act",
             "security_score": security_score,

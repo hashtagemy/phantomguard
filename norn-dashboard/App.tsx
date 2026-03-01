@@ -215,7 +215,7 @@ const App: React.FC = () => {
           steps.push({
             id: `${step.step_id || stepIdx}-check`,
             timestamp: step.timestamp,
-            type: 'phantom_check',
+            type: 'norn_check',
             content: checkContent,
             metadata: {
               riskScore,

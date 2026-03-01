@@ -906,21 +906,31 @@ class NornHook(HookProvider):
                 else:
                     step.security_score = shadow_score
             
-            # Check for discrepancies
-            if result.get("discrepancy_detected") or not result.get("verified"):
-                self._issues.append(QualityIssue(
-                    issue_type="SUSPICIOUS_BEHAVIOR",
-                    severity=7,
-                    description=f"Shadow Browser detected discrepancy in {tool_name}: {result.get('details', 'Content mismatch')}",
-                    affected_steps=[step.step_id],
-                    recommendation="Verify agent's browser actions manually"
-                ))
-            
+            # Check for discrepancies — skip when Nova Act was unavailable/errored
+            if result.get("verification_result") != "UNAVAILABLE":
+                if not result.get("verified"):
+                    self._issues.append(QualityIssue(
+                        issue_type=IssueType.SUSPICIOUS_BEHAVIOR,
+                        severity=7,
+                        description=f"Shadow Browser detected discrepancy in {tool_name}: {result.get('details', 'Content mismatch')}",
+                        affected_steps=[step.step_id],
+                        recommendation="Verify agent's browser actions manually"
+                    ))
+
             # Check for security issues
             if result.get("security_issues"):
                 for issue in result["security_issues"]:
+                    lower = issue.lower()
+                    if "injection" in lower:
+                        issue_type = IssueType.PROMPT_INJECTION
+                    elif "phishing" in lower or "redirect" in lower:
+                        issue_type = IssueType.SUSPICIOUS_BEHAVIOR
+                    elif "csrf" in lower:
+                        issue_type = IssueType.SECURITY_BYPASS
+                    else:
+                        issue_type = IssueType.SUSPICIOUS_BEHAVIOR
                     self._issues.append(QualityIssue(
-                        issue_type="UNAUTHORIZED_ACCESS" if "phishing" in issue.lower() else "SUSPICIOUS_BEHAVIOR",
+                        issue_type=issue_type,
                         severity=9,
                         description=f"Shadow Browser security alert: {issue}",
                         affected_steps=[step.step_id],

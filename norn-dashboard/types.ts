@@ -44,7 +44,7 @@ export interface ShadowVerification {
 export interface AgentStep {
   id: string;
   timestamp: string;
-  type: 'user' | 'agent_thought' | 'tool_call' | 'tool_result' | 'phantom_check';
+  type: 'user' | 'agent_thought' | 'tool_call' | 'tool_result' | 'norn_check';
   content: string;
   metadata?: {
     toolName?: string;

@@ -87,7 +87,7 @@ export const ExecutionStepsPanel: React.FC<ExecutionStepsPanelProps> = ({ sessio
 
             {/* Timeline Dot */}
             <div className={`absolute left-[0.3rem] top-1.5 w-2 h-2 rounded-full border-2 border-dark-bg z-10 ${
-              step.type === 'phantom_check' ? (
+              step.type === 'norn_check' ? (
                 step.metadata?.riskScore == null ? 'bg-gray-500' :
                 step.metadata.riskScore > 50 ? 'bg-red-500' : 'bg-emerald-500'
               ) :
@@ -113,14 +113,14 @@ export const ExecutionStepsPanel: React.FC<ExecutionStepsPanelProps> = ({ sessio
                   {step.timestamp ? new Date(step.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''}
                 </span>
                 <span className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded flex items-center gap-1 ${
-                  step.type === 'phantom_check' ? 'bg-phantom-950 text-phantom-400' :
+                  step.type === 'norn_check' ? 'bg-phantom-950 text-phantom-400' :
                   step.type === 'agent_thought' ? 'bg-purple-950/40 text-purple-300' :
                   step.type === 'tool_call' ? 'bg-orange-950/30 text-orange-400' :
                   step.type === 'tool_result' ? 'bg-cyan-950/30 text-cyan-400' :
                   step.type === 'user' ? 'bg-blue-950/30 text-blue-400' : 'bg-gray-800 text-gray-400'
                 }`}>
                   {step.type === 'agent_thought' && <Brain size={9} />}
-                  {step.type === 'agent_thought' ? 'AI Reasoning' : step.type === 'phantom_check' ? 'NORN CHECK' : step.type.replace(/_/g, ' ')}
+                  {step.type === 'agent_thought' ? 'AI Reasoning' : step.type === 'norn_check' ? 'NORN CHECK' : step.type.replace(/_/g, ' ')}
                 </span>
                 {step.metadata?.toolName && step.type !== 'agent_thought' && (
                   <span className="text-[10px] text-gray-500">&rarr; {step.metadata.toolName}</span>
@@ -128,7 +128,7 @@ export const ExecutionStepsPanel: React.FC<ExecutionStepsPanelProps> = ({ sessio
               </div>
 
               <div className={`text-xs p-2 rounded-lg font-mono border whitespace-pre-wrap ${
-                step.type === 'phantom_check'
+                step.type === 'norn_check'
                   ? (step.metadata?.riskScore == null ? 'bg-gray-900/10 border-gray-800/30 text-gray-400' :
                      step.metadata.riskScore > 0 ? 'bg-red-950/10 border-red-900/30 text-red-200' :
                      'bg-emerald-950/10 border-emerald-900/30 text-emerald-200')
@@ -140,7 +140,7 @@ export const ExecutionStepsPanel: React.FC<ExecutionStepsPanelProps> = ({ sessio
               </div>
 
               {/* Nova Act shadow verification badge */}
-              {step.type === 'phantom_check' && step.metadata?.shadowVerification && (
+              {step.type === 'norn_check' && step.metadata?.shadowVerification && (
                 <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium flex items-center gap-1 ${
                     step.metadata.shadowVerification.verificationResult === 'VERIFIED'
