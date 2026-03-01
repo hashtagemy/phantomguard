@@ -767,8 +767,13 @@ class NornHook(HookProvider):
         # Priority (highest severity wins, applied unconditionally):
         #   loop_detected / INFINITE_LOOP >= 8  → STUCK  ("agent in infinite loop")
         #   SECURITY_BYPASS >= 8                → FAILED ("task not completed safely")
+        _HARD_SECURITY_TYPES = {
+            IssueType.SECURITY_BYPASS,
+            IssueType.PROMPT_INJECTION,
+            IssueType.DATA_EXFILTRATION,
+        }
         has_security_bypass = any(
-            i.issue_type == IssueType.SECURITY_BYPASS and i.severity >= 8
+            i.issue_type in _HARD_SECURITY_TYPES and i.severity >= 8
             for i in self._issues
         )
         has_loop_issue = any(
@@ -781,10 +786,17 @@ class NornHook(HookProvider):
         elif has_security_bypass:
             self._session_report.overall_quality = SessionQuality.FAILED
 
-        # Cap security_score at 40 whenever a hard security bypass was detected
+        # Cap security_score at 20 for prompt injection / data exfiltration,
+        # at 40 for other hard security bypasses
         if has_security_bypass:
-            if self._session_report.security_score is None or self._session_report.security_score > 40:
-                self._session_report.security_score = 40
+            has_critical = any(
+                i.issue_type in {IssueType.PROMPT_INJECTION, IssueType.DATA_EXFILTRATION}
+                and i.severity >= 8
+                for i in self._issues
+            )
+            cap = 20 if has_critical else 40
+            if self._session_report.security_score is None or self._session_report.security_score > cap:
+                self._session_report.security_score = cap
 
         # Write to audit log
         self.audit.record_session(self._session_report)
