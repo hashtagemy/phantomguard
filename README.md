@@ -266,7 +266,7 @@ run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
 # ── Agent A — first step in the pipeline ─────────────────────────────────────
 hook_a = NornHook(
     norn_url="http://localhost:8000",
-    agent_name="Agent A",             # label shown on the dashboard
+    agent_name="agenta",              # label shown on the dashboard
     swarm_id=f"my-pipeline-{run_id}", # shared across all agents in this run
     swarm_order=1,                    # position in the pipeline (1 = first)
 )
@@ -276,7 +276,7 @@ result_a = agent_a("Find recent AI safety research trends")
 # ── Agent B — second step, receives Agent A's output ─────────────────────────
 hook_b = NornHook(
     norn_url="http://localhost:8000",
-    agent_name="Agent B",
+    agent_name="agentb",
     swarm_id=f"my-pipeline-{run_id}", # same run_id — links A and B together
     swarm_order=2,
     handoff_input=str(result_a)[:500], # data passed from A → shown on dashboard
