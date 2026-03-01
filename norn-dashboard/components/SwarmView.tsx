@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Network, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Clock, ArrowDown, MessageSquare } from 'lucide-react';
+import { Network, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Clock, ArrowDown, MessageSquare, Cpu, Microscope, Brain, Lightbulb, GitMerge, Zap } from 'lucide-react';
 import { api } from '../services/api';
 
 interface SwarmAgent {
@@ -19,10 +19,18 @@ interface Swarm {
   swarm_id: string;
   agent_count: number;
   overall_quality: string;
-  drift_score: number;   // 0.0–1.0 (1.0 = no drift)
   started_at: string;
   ended_at: string;
   agents: SwarmAgent[];
+}
+
+interface SwarmAnalysis {
+  swarm_id: string;
+  summary: string;
+  agent_assessments: { agent_name: string; order: number; note: string }[];
+  handoff_quality: string;
+  pipeline_coherence: string;
+  recommendations: string[];
 }
 
 const qualityColor = (q: string) => {
@@ -36,13 +44,6 @@ const qualityColor = (q: string) => {
   }
 };
 
-const driftLabel = (score: number) => {
-  const pct = Math.round(score * 100);
-  if (pct >= 80) return { label: 'Aligned', color: 'text-emerald-400' };
-  if (pct >= 50) return { label: 'Slight Drift', color: 'text-yellow-400' };
-  return { label: 'High Drift', color: 'text-red-400' };
-};
-
 // Collapsible handoff data bubble shown between two agents
 const HandoffConnector: React.FC<{ data: string }> = ({ data }) => {
   const [expanded, setExpanded] = useState(false);
@@ -50,16 +51,12 @@ const HandoffConnector: React.FC<{ data: string }> = ({ data }) => {
 
   return (
     <div className="flex flex-col items-center w-full">
-      {/* Top stem */}
       <div className="w-px h-3 bg-phantom-900/40" />
-
-      {/* Handoff pill */}
       <div className="w-full pl-9 pr-0">
         <button
           onClick={() => setExpanded(!expanded)}
           className="w-full text-left bg-phantom-950/20 border border-phantom-900/30 rounded-lg px-3 py-2.5 hover:bg-phantom-950/30 transition-colors group"
         >
-          {/* Header row */}
           <div className="flex items-center gap-2 mb-1.5">
             <MessageSquare size={11} className="text-phantom-400 flex-shrink-0" />
             <span className="text-[10px] font-semibold text-phantom-400 uppercase tracking-wider">
@@ -71,21 +68,17 @@ const HandoffConnector: React.FC<{ data: string }> = ({ data }) => {
               </span>
             )}
           </div>
-          {/* Content */}
           <p className={`text-xs text-gray-400 leading-relaxed whitespace-pre-wrap break-words ${!expanded && isLong ? 'line-clamp-3' : ''}`}>
             {data}
           </p>
         </button>
       </div>
-
-      {/* Bottom stem + arrow */}
       <div className="w-px h-3 bg-phantom-900/40" />
       <ArrowDown size={10} className="text-phantom-700" />
     </div>
   );
 };
 
-// Simple connector (no handoff data)
 const SimpleConnector: React.FC = () => (
   <div className="flex flex-col items-center">
     <div className="w-px h-3 bg-phantom-900/40" />
@@ -93,10 +86,138 @@ const SimpleConnector: React.FC = () => (
   </div>
 );
 
+// AI Analysis panel for a swarm — mirrors the style of AIAnalysisPanel.tsx
+const SwarmAnalysisPanel: React.FC<{ swarmId: string }> = ({ swarmId }) => {
+  const [analysis, setAnalysis] = useState<SwarmAnalysis | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.getSwarmAnalysis(swarmId)
+      .then(setAnalysis)
+      .catch(e => setError(e instanceof Error ? e.message : 'Analysis failed'))
+      .finally(() => setLoading(false));
+  }, [swarmId]);
+
+  if (loading) {
+    return (
+      <div className="bg-gradient-to-b from-phantom-900/20 to-dark-surface rounded-lg border border-phantom-900/30 p-4">
+        <p className="text-xs text-gray-500 animate-pulse">Analyzing pipeline...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-950/20 border border-red-900/30 rounded-lg p-4">
+        <p className="text-xs text-red-400">{error}</p>
+      </div>
+    );
+  }
+
+  if (!analysis) return null;
+
+  const coherenceColor =
+    analysis.pipeline_coherence === 'EXCELLENT' ? 'text-emerald-400' :
+    analysis.pipeline_coherence === 'GOOD' ? 'text-blue-400' :
+    'text-yellow-400';
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-gradient-to-b from-phantom-900/20 to-dark-surface rounded-lg border border-phantom-900/30 overflow-hidden">
+        <div className="p-3 border-b border-phantom-900/30 bg-phantom-900/10 flex items-center justify-between">
+          <h3 className="text-xs font-semibold text-phantom-300 flex items-center gap-2">
+            <Cpu size={13} /> Amazon Nova AI Evaluation
+          </h3>
+          <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border text-phantom-400/70 border-phantom-500/20">
+            AI Generated
+          </span>
+        </div>
+
+        <div className="p-4 space-y-4">
+
+          {/* Summary */}
+          <div>
+            <h4 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <Microscope size={12} className="text-blue-400" /> Pipeline Analysis
+            </h4>
+            <p className="text-xs text-gray-300 leading-relaxed bg-dark-bg/50 p-3 rounded-lg border border-dark-border/50">
+              {analysis.summary}
+            </p>
+          </div>
+
+          {/* Per-agent assessments */}
+          {analysis.agent_assessments && analysis.agent_assessments.length > 0 && (
+            <div>
+              <h4 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Brain size={12} className="text-purple-400" /> Agent Assessments
+              </h4>
+              <ul className="space-y-1.5">
+                {analysis.agent_assessments.map((a, idx) => (
+                  <li key={idx} className="p-2 rounded-lg border bg-dark-bg/50 border-dark-border/50">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="w-4 h-4 rounded-full bg-phantom-950/60 border border-phantom-900/50 flex items-center justify-center flex-shrink-0">
+                        <span className="text-[9px] font-bold text-phantom-300">{a.order}</span>
+                      </span>
+                      <span className="text-xs font-medium text-gray-200">{a.agent_name}</span>
+                    </div>
+                    <p className="text-[10px] text-gray-400 leading-relaxed pl-6">{a.note}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Handoff quality */}
+          {analysis.handoff_quality && (
+            <div>
+              <h4 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <GitMerge size={12} className="text-cyan-400" /> Handoff Quality
+              </h4>
+              <p className="text-[10px] text-gray-300 leading-relaxed bg-dark-bg/50 p-2 rounded-lg border border-dark-border/50">
+                {analysis.handoff_quality}
+              </p>
+            </div>
+          )}
+
+          {/* Pipeline coherence */}
+          {analysis.pipeline_coherence && (
+            <div>
+              <h4 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Zap size={12} className="text-orange-400" /> Pipeline Coherence
+              </h4>
+              <p className={`text-xs font-semibold bg-dark-bg/50 p-2 rounded-lg border border-dark-border/50 ${coherenceColor}`}>
+                {analysis.pipeline_coherence}
+              </p>
+            </div>
+          )}
+
+          {/* Recommendations */}
+          {analysis.recommendations && analysis.recommendations.length > 0 && (
+            <div>
+              <h4 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Lightbulb size={12} className="text-yellow-400" /> Recommended Actions
+              </h4>
+              <ul className="space-y-1.5">
+                {analysis.recommendations.map((rec, idx) => (
+                  <li key={idx} className="flex gap-2 text-xs text-gray-300 bg-dark-bg/50 p-2 rounded-lg border border-dark-border/50">
+                    <span className="text-phantom-500 flex-shrink-0">&bull;</span>
+                    <span>{rec}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const SwarmCard: React.FC<{ swarm: Swarm; onSelectSession?: (id: string) => void }> = ({ swarm, onSelectSession }) => {
   const [expanded, setExpanded] = useState(false);
-  const drift = driftLabel(swarm.drift_score);
-  const driftPct = Math.round(swarm.drift_score * 100);
+  const [activeTab, setActiveTab] = useState<'pipeline' | 'analysis'>('pipeline');
 
   return (
     <div className="bg-dark-surface border border-dark-border rounded-xl overflow-hidden">
@@ -118,8 +239,6 @@ const SwarmCard: React.FC<{ swarm: Swarm; onSelectSession?: (id: string) => void
           </div>
           <div className="flex items-center gap-3 text-xs text-gray-500">
             <span>{swarm.agent_count} agents</span>
-            <span>·</span>
-            <span className={drift.color}>{drift.label} ({driftPct}%)</span>
             {swarm.started_at && (
               <>
                 <span>·</span>
@@ -129,105 +248,121 @@ const SwarmCard: React.FC<{ swarm: Swarm; onSelectSession?: (id: string) => void
           </div>
         </div>
 
-        {/* Drift bar */}
-        <div className="flex-shrink-0 w-24 hidden sm:block">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs text-gray-500">Alignment</span>
-            <span className={`text-xs font-medium ${drift.color}`}>{driftPct}%</span>
-          </div>
-          <div className="w-full bg-dark-bg rounded-full h-1.5">
-            <div
-              className={`h-1.5 rounded-full transition-all ${driftPct >= 80 ? 'bg-emerald-500' : driftPct >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
-              style={{ width: `${driftPct}%` }}
-            />
-          </div>
-        </div>
-
-        {expanded ? <ChevronDown size={16} className="text-gray-500 flex-shrink-0" /> : <ChevronRight size={16} className="text-gray-500 flex-shrink-0" />}
+        {expanded
+          ? <ChevronDown size={16} className="text-gray-500 flex-shrink-0" />
+          : <ChevronRight size={16} className="text-gray-500 flex-shrink-0" />
+        }
       </button>
 
-      {/* Agent Pipeline */}
+      {/* Expanded content */}
       {expanded && (
-        <div className="border-t border-dark-border px-5 py-4">
-          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">
-            Agent Pipeline
+        <div className="border-t border-dark-border">
+
+          {/* Tab bar */}
+          <div className="flex border-b border-dark-border px-5">
+            <button
+              onClick={() => setActiveTab('pipeline')}
+              className={`py-2.5 px-1 mr-6 text-xs font-medium border-b-2 transition-colors ${
+                activeTab === 'pipeline'
+                  ? 'border-phantom-400 text-phantom-300'
+                  : 'border-transparent text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              Agent Pipeline
+            </button>
+            <button
+              onClick={() => setActiveTab('analysis')}
+              className={`py-2.5 px-1 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
+                activeTab === 'analysis'
+                  ? 'border-phantom-400 text-phantom-300'
+                  : 'border-transparent text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              <Cpu size={11} />
+              AI Analysis
+            </button>
           </div>
 
-          <div className="flex flex-col">
-            {swarm.agents.map((agent, idx) => (
-              <React.Fragment key={agent.session_id}>
-                {/* Agent row */}
-                <div className="flex items-start gap-3">
-                  {/* Step badge */}
-                  <div className="flex flex-col items-center flex-shrink-0 pt-1 w-6">
-                    <div className="w-6 h-6 rounded-full bg-phantom-950/60 border border-phantom-900/50 flex items-center justify-center">
-                      <span className="text-xs font-bold text-phantom-300">{agent.swarm_order ?? idx + 1}</span>
-                    </div>
-                  </div>
+          {/* Agent Pipeline tab */}
+          {activeTab === 'pipeline' && (
+            <div className="px-5 py-4">
+              <div className="flex flex-col">
+                {swarm.agents.map((agent, idx) => (
+                  <React.Fragment key={agent.session_id}>
+                    <div className="flex items-start gap-3">
+                      <div className="flex flex-col items-center flex-shrink-0 pt-1 w-6">
+                        <div className="w-6 h-6 rounded-full bg-phantom-950/60 border border-phantom-900/50 flex items-center justify-center">
+                          <span className="text-xs font-bold text-phantom-300">{agent.swarm_order ?? idx + 1}</span>
+                        </div>
+                      </div>
 
-                  {/* Agent card */}
-                  <div
-                    className={`flex-1 bg-dark-bg border border-dark-border rounded-lg px-4 py-3 ${onSelectSession && agent.session_id ? 'cursor-pointer hover:border-phantom-700 hover:bg-dark-surface transition-colors' : ''}`}
-                    onClick={() => onSelectSession && agent.session_id && onSelectSession(agent.session_id)}
-                  >
-                    <div className="flex items-center justify-between gap-3 mb-1">
-                      <span className="text-sm font-medium text-gray-200">{agent.agent_name}</span>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${qualityColor(agent.overall_quality)}`}>
-                          {agent.overall_quality}
-                        </span>
-                        {agent.status === 'running' && (
-                          <span className="flex items-center gap-1 text-xs text-phantom-400">
-                            <span className="animate-ping w-1.5 h-1.5 rounded-full bg-phantom-400 inline-block" />
-                            Running
-                          </span>
+                      <div
+                        className={`flex-1 bg-dark-bg border border-dark-border rounded-lg px-4 py-3 ${onSelectSession && agent.session_id ? 'cursor-pointer hover:border-phantom-700 hover:bg-dark-surface transition-colors' : ''}`}
+                        onClick={() => onSelectSession && agent.session_id && onSelectSession(agent.session_id)}
+                      >
+                        <div className="flex items-center justify-between gap-3 mb-1">
+                          <span className="text-sm font-medium text-gray-200">{agent.agent_name}</span>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${qualityColor(agent.overall_quality)}`}>
+                              {agent.overall_quality}
+                            </span>
+                            {agent.status === 'running' && (
+                              <span className="flex items-center gap-1 text-xs text-phantom-400">
+                                <span className="animate-ping w-1.5 h-1.5 rounded-full bg-phantom-400 inline-block" />
+                                Running
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {agent.task && (
+                          <p className="text-xs text-gray-400 mb-2 line-clamp-2">{agent.task}</p>
                         )}
+
+                        <div className="flex items-center gap-4 text-xs text-gray-500">
+                          <span>{agent.total_steps} steps</span>
+                          {agent.efficiency_score != null && (
+                            <span className="flex items-center gap-1">
+                              <CheckCircle size={11} className="text-blue-400" />
+                              Eff {agent.efficiency_score}%
+                            </span>
+                          )}
+                          {agent.security_score != null && (
+                            <span className={`flex items-center gap-1 ${agent.security_score < 70 ? 'text-red-400' : 'text-gray-500'}`}>
+                              {agent.security_score < 70 && <AlertTriangle size={11} />}
+                              Sec {agent.security_score}%
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
-                    {/* Task */}
-                    {agent.task && (
-                      <p className="text-xs text-gray-400 mb-2 line-clamp-2">{agent.task}</p>
+                    {idx < swarm.agents.length - 1 && (
+                      <div className="flex items-start gap-3 py-0.5">
+                        <div className="w-6 flex-shrink-0 flex justify-center">
+                          <div className="w-px bg-phantom-900/40 h-full min-h-[8px]" />
+                        </div>
+                        <div className="flex-1 -mt-0.5">
+                          {swarm.agents[idx + 1].handoff_input
+                            ? <HandoffConnector data={swarm.agents[idx + 1].handoff_input!} />
+                            : <SimpleConnector />
+                          }
+                        </div>
+                      </div>
                     )}
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          )}
 
-                    {/* Scores */}
-                    <div className="flex items-center gap-4 text-xs text-gray-500">
-                      <span>{agent.total_steps} steps</span>
-                      {agent.efficiency_score != null && (
-                        <span className="flex items-center gap-1">
-                          <CheckCircle size={11} className="text-blue-400" />
-                          Eff {agent.efficiency_score}%
-                        </span>
-                      )}
-                      {agent.security_score != null && (
-                        <span className={`flex items-center gap-1 ${agent.security_score < 70 ? 'text-red-400' : 'text-gray-500'}`}>
-                          {agent.security_score < 70 && <AlertTriangle size={11} />}
-                          Sec {agent.security_score}%
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
+          {/* AI Analysis tab */}
+          {activeTab === 'analysis' && (
+            <div className="px-5 py-4">
+              <SwarmAnalysisPanel swarmId={swarm.swarm_id} />
+            </div>
+          )}
 
-                {/* Connector between this agent and the next */}
-                {idx < swarm.agents.length - 1 && (
-                  <div className="flex items-start gap-3 py-0.5">
-                    {/* Spine alignment — same width as step badge col */}
-                    <div className="w-6 flex-shrink-0 flex justify-center">
-                      <div className="w-px bg-phantom-900/40 h-full min-h-[8px]" />
-                    </div>
-                    {/* Handoff or simple arrow */}
-                    <div className="flex-1 -mt-0.5">
-                      {swarm.agents[idx + 1].handoff_input
-                        ? <HandoffConnector data={swarm.agents[idx + 1].handoff_input!} />
-                        : <SimpleConnector />
-                      }
-                    </div>
-                  </div>
-                )}
-              </React.Fragment>
-            ))}
-          </div>
         </div>
       )}
     </div>
@@ -264,7 +399,7 @@ export const SwarmView: React.FC<{ onSelectSession?: (id: string) => void }> = (
         <div>
           <h1 className="text-xl font-bold text-gray-100">Swarm Monitor</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Multi-agent pipelines — inter-agent alignment and collective drift
+            Multi-agent pipelines — inter-agent collaboration and pipeline analysis
           </p>
         </div>
         <button
@@ -274,17 +409,6 @@ export const SwarmView: React.FC<{ onSelectSession?: (id: string) => void }> = (
           <Clock size={13} />
           Refresh
         </button>
-      </div>
-
-      {/* Info box */}
-      <div className="bg-dark-surface border border-dark-border rounded-xl p-4 text-xs text-gray-400 space-y-1">
-        <p className="font-medium text-gray-300">What is Alignment Score?</p>
-        <p>
-          Measures how closely each agent's task aligns with the first agent's intent in the swarm.
-          100% = all agents work toward the same goal · &lt;50% = significant topic drift.
-          Pass <code className="text-phantom-300 bg-phantom-950/30 px-1 rounded">handoff_input</code> to{' '}
-          <code className="text-phantom-300 bg-phantom-950/30 px-1 rounded">NornHook</code> to see inter-agent messages.
-        </p>
       </div>
 
       {/* Content */}

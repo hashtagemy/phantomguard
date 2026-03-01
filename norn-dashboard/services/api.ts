@@ -261,6 +261,10 @@ class ApiClient {
     return this.request<any>(`/api/swarms/${swarmId}`);
   }
 
+  async getSwarmAnalysis(swarmId: string): Promise<any> {
+    return this.request<any>(`/api/swarms/${swarmId}/analysis`);
+  }
+
   // Agents
   async getAgents(): Promise<Agent[]> {
     return this.request<Agent[]>('/api/agents');
