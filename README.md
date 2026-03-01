@@ -222,12 +222,17 @@ from strands import Agent
 guard = NornHook(
     norn_url="http://localhost:8000",
     agent_name="My Agent",
+    session_id="my-agent",          # Fixed ID — steps accumulate across restarts
 )
 agent = Agent(tools=[...], hooks=[guard])
 agent("Your task")
 ```
 
 That's it. Every tool call is now tracked in real time on the dashboard.
+
+> **`session_id`** keeps steps from resetting on restart. Without it, each run
+> creates a new timestamped session card. Use a fixed slug (e.g. `"my-agent"`)
+> to persist the session across restarts.
 
 ### 2. Proxy Wrapper *(local logging only)*
 ```python

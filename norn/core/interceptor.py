@@ -219,8 +219,9 @@ class NornHook(HookProvider):
                 )
                 fixed_session_id = f"swarm-{swarm_slug}-{slug}"
             else:
-                # Solo hook agent: fixed ID — same card in dashboard across all runs
-                fixed_session_id = f"hook-{slug}"
+                # Solo hook agent: unique session per run
+                run_tag = datetime.now().strftime("%Y%m%d-%H%M%S")
+                fixed_session_id = f"hook-{slug}-{run_tag}"
         else:
             fixed_session_id = None
 
@@ -233,13 +234,12 @@ class NornHook(HookProvider):
             handoff_input=self.handoff_input,
         )
 
-        # Apply session ID: fixed slug takes priority, then caller-provided ID
-        if fixed_session_id:
-            self._session_report.session_id = fixed_session_id
-        elif self.session_id:
-            # Use the git-* session_id provided by _execute_agent_background()
-            # so the hook resumes the file already created by the run endpoint
+        # Apply session ID: explicit session_id always wins (enables persistent sessions);
+        # fall back to auto-generated slug, then to runner-provided ID.
+        if self.session_id:
             self._session_report.session_id = self.session_id
+        elif fixed_session_id:
+            self._session_report.session_id = fixed_session_id
 
         logger.info(f"Session started: {self._agent_name}")
 
