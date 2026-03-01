@@ -252,31 +252,39 @@ python your_agent.py   # ← automatically monitored, no code changes
 Group multiple agents into a monitored pipeline with `swarm_id`:
 
 ```python
+from datetime import datetime
 from norn import NornHook
 from strands import Agent
+
+# Unique ID per run — keeps each pipeline execution separate on the dashboard
+run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
 
 # Agent 1 — Researcher
 hook_a = NornHook(
     norn_url="http://localhost:8000",
     agent_name="Researcher",
-    swarm_id="research-pipeline",
+    swarm_id=f"research-pipeline-{run_id}",
     swarm_order=1,
 )
-agent_a = Agent(tools=[web_search, ...], hooks=[hook_a])
+agent_a = Agent(tools=[...], hooks=[hook_a])
 result_a = agent_a("Find recent AI safety research trends")
 
 # Agent 2 — Writer (receives output from Agent 1)
 hook_b = NornHook(
     norn_url="http://localhost:8000",
     agent_name="Writer",
-    swarm_id="research-pipeline",
+    swarm_id=f"research-pipeline-{run_id}",
     swarm_order=2,
+    handoff_input=str(result_a)[:500],
 )
-agent_b = Agent(tools=[file_write, ...], hooks=[hook_b])
+agent_b = Agent(tools=[...], hooks=[hook_b])
 agent_b(f"Write a report based on: {result_a}")
 ```
 
 Both sessions appear together under **Swarm Monitor** in the dashboard, with an alignment score showing how closely Agent 2's task stayed on topic.
+
+> **`swarm_id`** must be the same for all agents in a run and unique per run.
+> Use a timestamp suffix so each pipeline execution gets its own dashboard card.
 
 ---
 
