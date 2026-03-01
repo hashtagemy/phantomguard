@@ -45,7 +45,7 @@ class LocalFileStore:
 
     def __init__(self, base_dir: str | None = None):
         import os
-        self.base = Path(base_dir or os.environ.get("NORN_LOG_DIR", "norn_logs"))
+        self.base = Path(base_dir or os.environ.get("NORN_LOG_DIR", "norn_logs")).resolve()
         self.steps_dir = self.base / "steps"
         self.issues_dir = self.base / "issues"
         self.sessions_dir = self.base / "sessions"
