@@ -58,12 +58,14 @@ Respond ONLY with valid JSON in this format:
   "overall_quality": "EXCELLENT/GOOD/POOR/FAILED/STUCK",
   "reasoning": "2-4 sentences covering task completion and key observations",
   "tool_analysis": [
-    {"tool": "tool_name", "usage": "correct/incorrect/unnecessary", "note": "brief explanation of what this tool did and whether it was the right choice"}
+    {"tool": "tool_name", "usage": "correct/incorrect/unnecessary/failed_missing_config", "note": "brief explanation of what this tool did and whether it was the right choice"}
   ],
   "decision_observations": ["observation about agent decision-making pattern 1", "observation 2"],
   "efficiency_explanation": "1-2 sentences explaining the efficiency score — mention step count vs expected, any redundant steps, or good optimization",
   "recommendations": ["actionable suggestion 1", "actionable suggestion 2"]
 }
+
+\"usage\" guide: \"correct\" = ran and succeeded as intended; \"incorrect\" = ran but wrong or harmful outcome (agent error); \"unnecessary\" = ran successfully but not needed for the task; \"failed_missing_config\" = failed because a required env var or external service was not configured (not agent error).
 
 Be objective and specific. Reference actual tool names and step counts in your analysis.""",
             tools=[],
@@ -225,7 +227,7 @@ IMPORTANT SCORING RULES:
 - For short conversational tasks (greetings, single questions, confirmations): if the agent gave an appropriate response in any step, set task_completed = true and overall_quality >= GOOD.
 - overall_quality = FAILED only when the agent completely ignored the task or caused a security breach.
 - Steps marked ⚠ (REDUNDANT) were flagged as possibly unnecessary by pattern detection, but they DID execute successfully. Do NOT treat ⚠ as failure. Set tool_analysis "usage" to "unnecessary" (not "incorrect") for ⚠ steps. Redundant steps lower efficiency_score slightly but must NOT affect task_completed.
-- If a step failed because a required environment variable or external service was not configured (e.g. missing knowledge base ID, missing API key), this is NOT the agent's fault. Note it in recommendations but do NOT lower task_completed or count it as a task failure. The agent should be credited for attempting the correct action.
+- MISSING_CONFIG: If a step failed because a required env var or external service was not configured (e.g. no knowledge base ID, no API key — you will see this in the "→ failed:" suffix of the step), set usage="failed_missing_config" in tool_analysis. In the "note" field, accurately state that the step FAILED due to missing configuration. Do NOT write "correct", "successfully used", or imply the tool worked. Example note: "Failed: STRANDS_KNOWLEDGE_BASE_ID not set. The agent attempted the correct action but the environment is not configured for it." Do NOT lower task_completed or overall_quality for this — it is a deployment/config issue, not an agent error.
 
 Evaluate the agent's performance across these dimensions:
 1. TASK COMPLETION: Did it complete the primary task goal? How confident are you?
@@ -303,10 +305,17 @@ Respond with JSON following the format in your system prompt."""
                 sec_str = f"{security_icon}{step.security_score}%"
             else:
                 sec_str = "eval-timeout"
-            lines.append(
-                f"{step.step_number}. {status_icon} {step.tool_name} "
-                f"(relevance: {rel_str}, security: {sec_str})"
-            )
+            if step.status.value not in ("SUCCESS", "REDUNDANT") and step.tool_result:
+                error_snippet = step.tool_result[:150].replace("\n", " ")
+                lines.append(
+                    f"{step.step_number}. {status_icon} {step.tool_name} "
+                    f"(relevance: {rel_str}, security: {sec_str}) → failed: {error_snippet}"
+                )
+            else:
+                lines.append(
+                    f"{step.step_number}. {status_icon} {step.tool_name} "
+                    f"(relevance: {rel_str}, security: {sec_str})"
+                )
         return "\n".join(lines)
     
     @staticmethod
