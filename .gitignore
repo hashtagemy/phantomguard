@@ -67,3 +67,4 @@ repl_state/
 htmlcov/
 .coverage
 docs/
+tests/agents/
