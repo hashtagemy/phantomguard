@@ -493,6 +493,11 @@ class NornHook(HookProvider):
             status = StepStatus.FAILED
         elif any(i.issue_type.value == "INFINITE_LOOP" for i in self._issues if not i.auto_resolved):
             status = StepStatus.REDUNDANT
+        else:
+            # Strands tools return {'status': 'error', ...} without raising an exception.
+            # Detect this on the raw tool_result dict so the step is correctly marked FAILED.
+            if isinstance(tool_result, dict) and tool_result.get("status") == "error":
+                status = StepStatus.FAILED
         
         # Create step record (scores start as None, filled by async AI eval)
         step = StepRecord(
@@ -603,6 +608,9 @@ class NornHook(HookProvider):
                         affected_steps=[step.step_id],
                         recommendation=f"Fix the missing configuration. Matched pattern: '{_pattern}'"
                     ))
+                    # Tool returned an error response — update step status so AI
+                    # sees ✗ + error snippet instead of ✓ (which would look like success)
+                    step.status = StepStatus.FAILED
                     break
         
         except Exception as e:
