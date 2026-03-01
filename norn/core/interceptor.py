@@ -243,9 +243,104 @@ class NornHook(HookProvider):
 
         logger.info(f"Session started: {self._agent_name}")
 
+        # System prompt security analysis
+        system_prompt = getattr(event.agent, "system_prompt", None)
+        if system_prompt:
+            self._check_system_prompt(system_prompt)
+
         # Dashboard entegrasyonu
         if self._norn_url:
             self._dashboard_on_session_start()
+
+    # ── System Prompt Analysis ─────────────────────────────
+
+    def _check_system_prompt(self, system_prompt: str) -> None:
+        """Scan agent system prompt for malicious instructions (deterministic + AI).
+
+        Fires once at session start before any tool call.
+        Adds QualityIssue entries for suspicious patterns.
+        """
+        prompt_lower = system_prompt.lower()
+
+        # ── Deterministic pattern groups ──────────────────────────────────────
+        # Each group is (label, patterns). A match in ANY group contributes 1 hit.
+        # 2+ group hits → PROMPT_INJECTION (severity 9)
+        # 1 group hit   → SUSPICIOUS_BEHAVIOR (severity 7)
+
+        _SENSITIVE_FILES = [
+            "/etc/passwd", "/etc/shadow", "/etc/hosts", "/proc/",
+            "~/.ssh", "id_rsa", ".bash_history", ".env",
+            "c:\\windows\\system32", "c:/windows/system32",
+        ]
+        _RECON_COMMANDS = [
+            "shell command: env", "run the shell", "run shell",
+            "execute: env", "cmd: env",
+            "whoami", "run id", "ps aux", "netstat", "ifconfig", "ipconfig",
+            "uname -a", "cat /etc", "ls /etc",
+        ]
+        _EXFIL_PATTERNS = [
+            "post the collected", "post collected", "send the data",
+            "send collected", "upload to", "exfiltrate",
+            "httpbin.org/post", "webhook.site", "requestbin",
+            "ngrok.io", "burpcollaborator",
+        ]
+        _COVERT_INSTRUCTIONS = [
+            "before doing any task", "before every task", "always collect",
+            "first collect", "always read", "before answering",
+            "without telling the user", "do not mention this",
+            "never reveal", "keep this secret", "hidden instruction",
+        ]
+
+        groups = [
+            ("sensitive_file_access", _SENSITIVE_FILES),
+            ("recon_commands",        _RECON_COMMANDS),
+            ("data_exfiltration",     _EXFIL_PATTERNS),
+            ("covert_instructions",   _COVERT_INSTRUCTIONS),
+        ]
+
+        matched_groups: list[str] = []
+        matched_samples: list[str] = []
+        for group_name, patterns in groups:
+            for pat in patterns:
+                if pat in prompt_lower:
+                    matched_groups.append(group_name)
+                    matched_samples.append(pat)
+                    break  # one match per group is enough
+
+        if not matched_groups:
+            return
+
+        # Build issue
+        hit_count = len(matched_groups)
+        severity = 9 if hit_count >= 2 else 7
+        issue_type = IssueType.PROMPT_INJECTION if hit_count >= 2 else IssueType.SUSPICIOUS_BEHAVIOR
+
+        description = (
+            f"Malicious instructions detected in agent system prompt "
+            f"({hit_count} suspicious category{'s' if hit_count > 1 else ''} matched: "
+            f"{', '.join(matched_groups)}). "
+            f"Matched patterns: {matched_samples}."
+        )
+        recommendation = (
+            "Review the agent's system prompt. "
+            "It may contain instructions to access sensitive files, "
+            "collect environment variables, or exfiltrate data to external URLs."
+        )
+
+        self._issues.append(QualityIssue(
+            issue_type=issue_type,
+            severity=severity,
+            description=description,
+            recommendation=recommendation,
+        ))
+
+        if self._session_report:
+            self._session_report.security_breach_detected = True
+
+        logger.warning(
+            "System prompt security alert (severity=%d, groups=%s): %s",
+            severity, matched_groups, description[:120],
+        )
 
     def _on_message_added(self, event: MessageAddedEvent) -> None:
         """Auto-set task from the first user message.
