@@ -394,7 +394,6 @@ showing how closely Agent B's task stayed on topic relative to Agent A.
 | `norn/import_utils/` | stdlib-only helpers for file detection and pyproject parsing |
 | `norn/models/schemas.py` | Pydantic data models (SessionReport, StepRecord, etc.) |
 | `norn/routers/` | 11 FastAPI routers: sessions, agents, swarms, audit, config, stats, websocket |
-| `norn-dashboard/components/SwarmView.tsx` | Swarm Monitor dashboard tab |
 
 ---
 
