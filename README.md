@@ -290,7 +290,11 @@ showing how closely Agent B's task stayed on topic relative to Agent A.
 
 > **`swarm_id`** must be identical for all agents in a run and unique per run.
 > **`swarm_order`** controls the visual order in the pipeline (1 = first agent).
-> **`handoff_input`** is optional — pass it to display inter-agent data on the dashboard.
+> **`handoff_input`** is optional. Pass the output of the previous agent here to make the handoff
+> visible on the dashboard — it appears as the "received input" for that agent's pipeline card.
+> This lets you answer questions like *"what exactly did Agent A pass to Agent B?"* when debugging
+> a run. Without it, the pipeline still works but inter-agent data flow is not recorded.
+> Truncate to a reasonable length (e.g. `[:500]`) to keep the payload small.
 
 ---
 
