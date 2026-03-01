@@ -10,7 +10,7 @@
 |---|---|---|
 | Python | 3.10+ | Backend |
 | Node.js | 18+ | Frontend dashboard |
-| AWS account | — | Required for Amazon Bedrock (Nova Lite / Micro) |
+| AWS account | — | Required for Amazon Bedrock (Nova Lite) |
 | Nova Act API key | — | Shadow Browser verification (optional) |
 
 ---
@@ -110,18 +110,20 @@ from strands import Agent
 
 # Step 1 — Researcher
 hook_a = NornHook(
+    norn_url="http://localhost:8000",
+    agent_name="Researcher",
     swarm_id="my-pipeline",   # shared across all agents in this run
     swarm_order=1,            # position in the pipeline
-    agent_name="Researcher"
 )
 agent_a = Agent(tools=[...], hooks=[hook_a])
 result_a = agent_a("Find the latest AI safety research trends")
 
 # Step 2 — Writer (receives output from step 1)
 hook_b = NornHook(
+    norn_url="http://localhost:8000",
+    agent_name="Writer",
     swarm_id="my-pipeline",
     swarm_order=2,
-    agent_name="Writer"
 )
 agent_b = Agent(tools=[...], hooks=[hook_b])
 agent_b(f"Write a report based on this research: {result_a}")

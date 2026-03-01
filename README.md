@@ -157,7 +157,7 @@ The path is exposed as `NORN_WORKSPACE` so agents can reference it explicitly.
 
 ### 5. Runtime Monitoring
 - **Step Analyzer** — Detects loops, drift, and inefficiency (deterministic, fast)
-- **Quality Evaluator** — AI-powered relevance and security scoring via Amazon Nova Micro
+- **Quality Evaluator** — AI-powered relevance and security scoring via Amazon Nova Lite
 - **Security Monitor** — Checks for data leaks, injections, unauthorized access
 
 ### 6. Session Evaluation
@@ -214,25 +214,33 @@ Nova Act                  # Shadow browser verification (requires NOVA_ACT_API_K
 
 Add Norn to your own Strands agent in one of four ways:
 
-### 1. Manual Hook
+### 1. Manual Hook *(recommended — full dashboard integration)*
 ```python
 from norn import NornHook
 from strands import Agent
 
-guard = NornHook(task="Your task description")
+guard = NornHook(
+    norn_url="http://localhost:8000",
+    agent_name="My Agent",
+)
 agent = Agent(tools=[...], hooks=[guard])
-agent("Your task description")
+agent("Your task")
 ```
 
-### 2. Proxy Wrapper
+That's it. Every tool call is now tracked in real time on the dashboard.
+
+### 2. Proxy Wrapper *(local logging only)*
 ```python
 from norn.proxy import MonitoredAgent
 
-agent = MonitoredAgent(model=model, tools=tools, task="Your task description")
-agent("Your task description")
+agent = MonitoredAgent(model=model, tools=tools)
+agent("Your task")
 ```
 
-### 3. Global Monitoring
+> Sessions are saved to `norn_logs/` but **not** pushed to the dashboard.
+> Use **Manual Hook** with `norn_url` for dashboard visibility.
+
+### 3. Global Monitoring *(local logging only)*
 ```python
 from norn.proxy import enable_global_monitoring
 
@@ -240,11 +248,15 @@ enable_global_monitoring()
 # All Agent instances are now monitored automatically
 ```
 
-### 4. Environment Variable (Zero Code)
+> Sessions are saved locally. Use **Manual Hook** for dashboard integration.
+
+### 4. Environment Variable (Zero Code) *(local logging only)*
 ```bash
 export NORN_AUTO_ENABLE=true
 python your_agent.py
 ```
+
+> Sessions are saved locally. Use **Manual Hook** for dashboard integration.
 
 ### 5. Multi-Agent Swarm
 Group multiple agents into a monitored pipeline with `swarm_id`:
@@ -255,18 +267,20 @@ from strands import Agent
 
 # Agent 1 — Researcher
 hook_a = NornHook(
+    norn_url="http://localhost:8000",
+    agent_name="Researcher",
     swarm_id="research-pipeline",
     swarm_order=1,
-    agent_name="Researcher"
 )
 agent_a = Agent(tools=[web_search, ...], hooks=[hook_a])
 result_a = agent_a("Find recent AI safety research trends")
 
 # Agent 2 — Writer (receives output from Agent 1)
 hook_b = NornHook(
+    norn_url="http://localhost:8000",
+    agent_name="Writer",
     swarm_id="research-pipeline",
     swarm_order=2,
-    agent_name="Writer"
 )
 agent_b = Agent(tools=[file_write, ...], hooks=[hook_b])
 agent_b(f"Write a report based on: {result_a}")

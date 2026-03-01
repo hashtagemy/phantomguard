@@ -219,8 +219,9 @@ class NornHook(HookProvider):
                 )
                 fixed_session_id = f"swarm-{swarm_slug}-{slug}"
             else:
-                # Solo hook agent: fixed ID (accumulates across runs)
-                fixed_session_id = f"hook-{slug}"
+                # Solo hook agent: unique session per run
+                run_tag = datetime.now().strftime("%Y%m%d-%H%M%S")
+                fixed_session_id = f"hook-{slug}-{run_tag}"
         else:
             fixed_session_id = None
 
