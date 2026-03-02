@@ -15,7 +15,38 @@
 
 ---
 
-## 1. Clone & Install
+## 1. Quick Start with Docker (Recommended)
+
+The easiest way to run the entire Norn platform (frontend + backend) is using Docker.
+
+```bash
+git clone https://github.com/hashtagemy/norn.git
+cd norn
+
+# Configure environment variables (Required for AWS/Nova models)
+cp .env.example .env
+# Edit .env and add your AWS credentials!
+
+# Build and start the container
+docker compose up --build
+```
+Once it's running, open your browser to **http://localhost:8000** to see the dashboard.
+
+---
+
+## 2. Using Norn inside scripts (PyPI)
+
+If you just want to use the Norn library (`NornHook`, etc.) to monitor your own agents safely, without running a local dashboard, you can install the SDK via PyPI:
+
+```bash
+pip install norn-sdk
+```
+
+---
+
+## 3. Manual Local Installation
+
+If you prefer to run the services separately without Docker:
 
 ```bash
 git clone https://github.com/hashtagemy/norn.git
@@ -37,7 +68,7 @@ cd ..
 
 ---
 
-## 2. Configure Environment
+## 3. Configure Environment (Manual mode)
 
 ```bash
 cp .env.example .env
@@ -56,7 +87,7 @@ AWS_DEFAULT_REGION=us-east-1
 
 ---
 
-## 3. Start the Backend
+## 4. Start the Backend (Manual mode)
 
 ```bash
 source .venv/bin/activate
@@ -72,9 +103,9 @@ curl http://localhost:8000/
 
 ---
 
-## 4. Start the Dashboard
+## 5. Start the Dashboard (Manual mode)
 
-Open a new terminal:
+If you used the **Manual Local Installation** (Option 3), open a new terminal:
 
 ```bash
 cd norn-dashboard
@@ -87,7 +118,7 @@ The **"System Online"** indicator in the top bar should be green. If it shows of
 
 ---
 
-## 5. Run Your First Agent
+## 6. Run Your First Agent
 
 1. Click **"+ Add Agent"** in the left sidebar
 2. Paste a GitHub repository URL **or** upload a ZIP file containing your agent
@@ -100,7 +131,7 @@ Output files created by the agent land in `norn_logs/workspace/{session_id}/`, k
 
 ---
 
-## 6. Monitor a Multi-Agent Swarm
+## 7. Monitor a Multi-Agent Swarm
 
 Use `swarm_id` to group multiple agents into a single monitored pipeline. Norn tracks them together and calculates an **alignment score** — how closely each agent stayed on the original goal.
 
@@ -144,7 +175,7 @@ The alignment score compares each agent's task to the first agent's intent:
 
 ---
 
-## 7. Workspace Isolation
+## 8. Workspace Isolation
 
 Every agent run gets its own working directory so output files don't pollute the project root:
 
