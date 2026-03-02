@@ -1,7 +1,7 @@
 # pyproject.toml
 
 [project]
-name = "norn"
+name = "norn-sdk"
 version = "0.2.0"
 description = "AI Agent Quality & Security Monitoring Platform - Real-time task execution tracking, loop detection, and threat prevention for Strands agents using Amazon Nova"
 readme = "README.md"
