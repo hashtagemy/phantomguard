@@ -6,7 +6,7 @@
   * {
     @apply border-dark-border;
   }
-  
+
   body {
     @apply bg-dark-bg text-gray-200 antialiased;
   }
@@ -16,11 +16,11 @@
   .animate-in {
     animation: fadeIn 0.3s ease-in;
   }
-  
+
   .fade-in {
     animation: fadeIn 0.5s ease-in;
   }
-  
+
   .slide-in-from-bottom-4 {
     animation: slideInFromBottom 0.5s ease-out;
   }
@@ -30,6 +30,7 @@
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -40,6 +41,7 @@
     opacity: 0;
     transform: translateY(1rem);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);

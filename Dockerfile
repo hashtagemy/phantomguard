@@ -31,7 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install Python dependencies
 # First copy only files needed for pip install
 COPY pyproject.toml README.md ./
-COPY norn/ __init__.py norn/
+COPY norn/__init__.py norn/__init__.py
 # Install norn with api dependencies
 RUN pip install --no-cache-dir -e ".[api]"
 

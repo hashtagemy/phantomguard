@@ -64,8 +64,12 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
+import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
 # ── Health endpoint ───────────────────────────────────────────────────────────
-@app.get("/")
+@app.get("/api/health")
 def health():
     return {"status": "ok", "service": "norn-api"}
 
@@ -98,6 +102,21 @@ for _router_mod in (
     app.include_router(_router_mod.router)
 
 
+# ── Serve React Frontend ──────────────────────────────────────────────────────
+frontend_dist = os.environ.get("FRONTEND_DIST", "/app/frontend/dist")
+if os.path.exists(frontend_dist):
+    # Mount build assets
+    assets_dir = os.path.join(frontend_dist, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    # Catch-all route to serve index.html for React Router
+    @app.get("/{catchall:path}")
+    def serve_react_app(catchall: str):
+        filepath = os.path.join(frontend_dist, catchall)
+        if os.path.exists(filepath) and os.path.isfile(filepath):
+            return FileResponse(filepath)
+        return FileResponse(os.path.join(frontend_dist, "index.html"))
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn

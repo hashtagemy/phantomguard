@@ -336,7 +336,7 @@ class ApiClient {
 
   // Health check — uses plain fetch without Content-Type to avoid CORS preflight
   async healthCheck(): Promise<{ status: string; service: string }> {
-    const response = await fetch(`${this.baseUrl}/`);
+    const response = await fetch(`${this.baseUrl}/api/health`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.json();
   }

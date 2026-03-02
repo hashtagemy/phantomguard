@@ -24,7 +24,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) =
 
       {/* Primary Action */}
       <div className="p-4 pb-2">
-        <button 
+        <button
           onClick={() => onChangeView('add_agent')}
           className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-phantom-600 hover:bg-phantom-500 text-white font-medium rounded-lg transition-colors shadow-lg shadow-phantom-900/20"
         >
@@ -43,8 +43,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) =
               key={item.id}
               onClick={() => onChangeView(item.id)}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200
-                ${isActive 
-                  ? 'bg-phantom-950/40 text-phantom-300 border border-phantom-900/50 shadow-sm' 
+                ${isActive
+                  ? 'bg-phantom-950/40 text-phantom-300 border border-phantom-900/50 shadow-sm'
                   : 'text-gray-400 hover:text-gray-100 hover:bg-dark-surface'
                 }`}
             >
