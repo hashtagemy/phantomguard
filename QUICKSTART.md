@@ -34,17 +34,7 @@ Once it's running, open your browser to **http://localhost:8000** to see the das
 
 ---
 
-## 2. Using Norn inside scripts (PyPI)
-
-If you just want to use the Norn library (`NornHook`, etc.) to monitor your own agents safely, without running a local dashboard, you can install the SDK via PyPI:
-
-```bash
-pip install norn-sdk
-```
-
----
-
-## 3. Manual Local Installation
+## 2. Manual Local Installation
 
 If you prefer to run the services separately without Docker:
 
@@ -61,9 +51,23 @@ pip install -e ".[api]"
 pip install -e ".[browser]"
 # Then set NOVA_ACT_API_KEY in your .env file
 
+# Configure environment variables (Required for AWS/Nova models)
+cp .env.example .env
+# Edit .env and add your AWS credentials!
+
 cd norn-dashboard
 npm install
 cd ..
+```
+
+---
+
+## 3. Using Norn inside scripts (PyPI)
+
+If you just want to use the Norn library (`NornHook`, etc.) to monitor your own agents safely, without running a local dashboard, you can install the SDK via PyPI:
+
+```bash
+pip install norn-sdk
 ```
 
 ---
@@ -105,7 +109,7 @@ curl http://localhost:8000/
 
 ## 5. Start the Dashboard (Manual mode)
 
-If you used the **Manual Local Installation** (Option 3), open a new terminal:
+If you used the **Manual Local Installation** (Option 2), open a new terminal:
 
 ```bash
 cd norn-dashboard

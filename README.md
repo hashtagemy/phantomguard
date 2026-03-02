@@ -86,13 +86,7 @@ docker compose up --build
 ```
 Open **http://localhost:8000** — the dashboard will be live.
 
-### Option 2: Install via PyPI
-To use Norn inside your own Python projects without the dashboard:
-```bash
-pip install norn-sdk
-```
-
-### Option 3: Manual Local Development
+### Option 2: Manual Local Development
 ```bash
 # Clone repository
 git clone https://github.com/hashtagemy/norn.git
@@ -115,6 +109,12 @@ python -m norn.api
 cd norn-dashboard && npm run dev
 ```
 Open **http://localhost:3000** for the dashboard.
+
+### Option 3: Install via PyPI
+To use Norn inside your own Python projects without the dashboard:
+```bash
+pip install norn-sdk
+```
 
 See [QUICKSTART.md](QUICKSTART.md) for detailed setup instructions.
 
