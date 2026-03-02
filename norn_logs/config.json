@@ -1,0 +1,13 @@
+{
+  "guard_mode": "monitor",
+  "max_steps": 50,
+  "enable_ai_eval": true,
+  "enable_shadow_browser": false,
+  "loop_window": 5,
+  "loop_threshold": 3,
+  "max_same_tool": 10,
+  "security_score_threshold": 70,
+  "relevance_score_threshold": 30,
+  "auto_intervene_on_loop": false,
+  "log_retention_days": 30
+}
