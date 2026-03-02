@@ -47,6 +47,15 @@ from norn.models.schemas import (
 
 logger = logging.getLogger("norn.interceptor")
 
+
+class NornSessionTerminated(RuntimeError):
+    """Raised by NornHook to forcefully stop an agent session.
+
+    Used by INTERVENE mode (critical loops) and ENFORCE mode (security violations).
+    The runner catches this and marks the session as 'terminated'.
+    """
+    pass
+
 # Sensitive field names — values are redacted before writing to logs/dashboard
 _SENSITIVE_KEYS: frozenset[str] = frozenset({
     "password", "passwd", "secret", "api_key", "apikey",
@@ -539,33 +548,59 @@ class NornHook(HookProvider):
             self._step_counter
         )
         
+        # Security issue types that trigger ENFORCE termination
+        _ENFORCE_SECURITY_TYPES = {
+            "SECURITY_BYPASS",
+            "PROMPT_INJECTION",
+            "DATA_EXFILTRATION",
+            "CREDENTIAL_LEAK",
+            "UNAUTHORIZED_ACCESS",
+        }
+
         # Record issues
         for issue in issues:
             self._issues.append(issue)
             if self.on_issue:
                 self.on_issue(issue)
-            
-            # Check for critical loop
-            if issue.issue_type.value == "INFINITE_LOOP" and issue.severity >= 8:
-                self._loop_detected = True
 
-            # Mark security breach for any high-severity security issue found deterministically
-            if issue.issue_type.value == "SECURITY_BYPASS" and issue.severity >= 7:
-                if self._session_report:
-                    self._session_report.security_breach_detected = True
-                
-                if self.mode == GuardMode.INTERVENE:
-                    logger.warning(f"INTERVENING: Loop detected at step {self._step_counter}")
-                    event.cancel_tool = True
-                    event.cancel_reason = f"Loop detected: {issue.description}"
-                    return
-        
-        # Check max steps
-        if self._step_counter > self.max_steps:
-            logger.warning(f"Max steps ({self.max_steps}) exceeded")
+            issue_type = issue.issue_type.value
+
+            # INTERVENE: terminate session on critical loop detection
             if self.mode == GuardMode.INTERVENE:
-                event.cancel_tool = True
-                event.cancel_reason = f"Exceeded maximum steps ({self.max_steps})"
+                if issue_type == "INFINITE_LOOP" and issue.severity >= 8:
+                    self._loop_detected = True
+                    if self._session_report:
+                        self._session_report.loop_detected = True
+                    logger.warning(
+                        "INTERVENING: terminating session — critical loop at step %d: %s",
+                        self._step_counter, issue.description,
+                    )
+                    raise NornSessionTerminated(
+                        f"Session terminated by Intervene mode: {issue.description}"
+                    )
+
+            # ENFORCE: terminate session on any serious security issue
+            if self.mode == GuardMode.ENFORCE:
+                if issue_type in _ENFORCE_SECURITY_TYPES:
+                    if self._session_report:
+                        self._session_report.security_breach_detected = True
+                    logger.warning(
+                        "ENFORCING: terminating session — security violation at step %d [%s]: %s",
+                        self._step_counter, issue_type, issue.description,
+                    )
+                    raise NornSessionTerminated(
+                        f"Session terminated by Enforce mode [{issue_type}]: {issue.description}"
+                    )
+
+        # INTERVENE: terminate session when step limit is exceeded
+        if self._step_counter > self.max_steps:
+            if self.mode == GuardMode.INTERVENE:
+                logger.warning(
+                    "INTERVENING: terminating session — max steps (%d) exceeded", self.max_steps
+                )
+                raise NornSessionTerminated(
+                    f"Session terminated by Intervene mode: exceeded maximum steps ({self.max_steps})"
+                )
     
     def _on_after_tool(self, event: AfterToolCallEvent) -> None:
         """Record tool execution result."""

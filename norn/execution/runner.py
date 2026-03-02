@@ -130,7 +130,7 @@ def _execute_agent_background(
 ) -> None:
     """Background thread: load the agent module and run it under NornHook monitoring."""
     import concurrent.futures as _cf
-    from norn.core.interceptor import NornHook
+    from norn.core.interceptor import NornHook, NornSessionTerminated
     from norn.core.audit_logger import AuditLogger
 
     session_file = SESSIONS_DIR / f"{session_id}.json"
@@ -172,11 +172,13 @@ def _execute_agent_background(
         root_req        = repo_root_obj  / "requirements.txt"
         agent_req       = agent_path_obj / "requirements.txt"
 
-        pip_base = [sys.executable, "-m", "pip", "install", "-q", "--user"]
+        # No --user: virtual env / conda ortamında --user ile kurulan paketler
+        # sys.path'te görünmeyebilir. Timeout 600s: ağır bağımlılıklı projeler için.
+        pip_base = [sys.executable, "-m", "pip", "install", "-q"]
 
         def _run_pip(args: list, label: str) -> None:
             result = subprocess.run(
-                pip_base + args, capture_output=True, text=True, timeout=120
+                pip_base + args, capture_output=True, text=True, timeout=600
             )
             if result.returncode != 0:
                 logger.warning("pip install failed (%s): %s", label, result.stderr[:500])
@@ -462,6 +464,44 @@ def _execute_agent_background(
                 if report.recommendations:
                     session["recommendations"] = report.recommendations
 
+            except NornSessionTerminated as exc:
+                session["ended_at"] = datetime.now().isoformat()
+                session["status"] = "terminated"
+                session["total_execution_time_ms"] = int((time.time() - start_time) * 1000)
+                session["issues"].append({
+                    "issue_type": "AGENT_TERMINATED",
+                    "severity": 9,
+                    "description": str(exc),
+                    "recommendation": "Review the audit log for the detected issue.",
+                })
+                # Save whatever steps were recorded before termination
+                try:
+                    report = guard.get_session_report()
+                    session["total_steps"] = report.total_steps
+                    session["loop_detected"] = report.loop_detected
+                    session["overall_quality"] = report.overall_quality.value
+                    for issue in report.issues:
+                        session["issues"].append({
+                            "issue_type": issue.issue_type.value,
+                            "severity": issue.severity,
+                            "description": issue.description,
+                            "recommendation": issue.recommendation,
+                        })
+                    for step in report.steps:
+                        session["steps"].append({
+                            "step_id": step.step_id,
+                            "step_number": step.step_number,
+                            "timestamp": step.timestamp.isoformat(),
+                            "tool_name": step.tool_name,
+                            "tool_input": str(step.tool_input),
+                            "tool_result": str(step.tool_result),
+                            "status": step.status.value,
+                            "relevance_score": step.relevance_score,
+                            "security_score": step.security_score,
+                            "reasoning": step.reasoning or "",
+                        })
+                except Exception:
+                    pass
             except Exception as exc:
                 session["ended_at"] = datetime.now().isoformat()
                 session["status"] = "terminated"
