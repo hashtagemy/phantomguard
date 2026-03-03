@@ -19,7 +19,7 @@ export const SessionList: React.FC<SessionListProps> = ({ sessions, onSelectSess
           <input 
             type="text" 
             placeholder="Search sessions..." 
-            className="w-full bg-dark-surface border border-dark-border rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-phantom-500 transition-colors"
+            className="w-full bg-dark-surface border border-dark-border rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-norn-500 transition-colors"
           />
         </div>
         <button className="flex items-center gap-2 px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-sm text-gray-300 hover:text-white transition-colors">
@@ -45,7 +45,7 @@ export const SessionList: React.FC<SessionListProps> = ({ sessions, onSelectSess
             className="grid grid-cols-12 gap-4 items-center px-4 py-3 bg-dark-surface/30 hover:bg-dark-surface rounded-lg border border-transparent hover:border-dark-border cursor-pointer transition-all group"
           >
             <div className="col-span-4 overflow-hidden">
-              <div className="font-medium text-gray-200 truncate group-hover:text-phantom-300 transition-colors">{session.agentName}</div>
+              <div className="font-medium text-gray-200 truncate group-hover:text-norn-300 transition-colors">{session.agentName}</div>
               <div className="text-xs text-gray-500 truncate">{session.taskPreview}</div>
             </div>
             

@@ -12,7 +12,7 @@ export default {
         'dark-bg': '#0a0a0f',
         'dark-surface': '#13131a',
         'dark-border': '#1f1f28',
-        'phantom': {
+        'norn': {
           50: '#f0fdf4',
           100: '#dcfce7',
           200: '#bbf7d0',

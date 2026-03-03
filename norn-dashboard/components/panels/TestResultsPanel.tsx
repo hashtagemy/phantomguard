@@ -110,7 +110,7 @@ export const TestResultsPanel: React.FC<TestResultsPanelProps> = ({ session }) =
         <div className="bg-dark-surface/50 p-3 rounded-lg border border-dark-border">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Overall Quality</h3>
-            <Target size={12} className="text-phantom-400" />
+            <Target size={12} className="text-norn-400" />
           </div>
           <div className={`text-sm font-bold mb-0.5 ${
             session.overallQuality === 'EXCELLENT' ? 'text-emerald-400' :

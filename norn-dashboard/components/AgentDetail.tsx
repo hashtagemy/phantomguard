@@ -80,7 +80,7 @@ export const AgentDetail: React.FC<AgentDetailProps> = ({ agent, onBack, current
             <button
               onClick={handleRunAgent}
               disabled={isRunning}
-              className="px-4 py-2 bg-phantom-600 hover:bg-phantom-500 text-white rounded-lg flex items-center gap-2 font-medium text-sm transition-colors disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-norn-600 hover:bg-norn-500 text-white rounded-lg flex items-center gap-2 font-medium text-sm transition-colors disabled:cursor-not-allowed"
             >
               {isRunning
                 ? <Loader2 size={15} className="animate-spin shrink-0" />
@@ -99,7 +99,7 @@ export const AgentDetail: React.FC<AgentDetailProps> = ({ agent, onBack, current
       {/* Hook agent — live monitoring note */}
       {agent.source === 'hook' && (
         <div className="mb-4 p-3 bg-dark-surface/50 rounded-xl border border-dark-border flex items-center gap-2">
-          <Activity size={12} className="text-phantom-500 shrink-0" />
+          <Activity size={12} className="text-norn-500 shrink-0" />
           <p className="text-xs text-gray-500">
             Live monitoring active. Steps and reports are tracked automatically as the agent runs.
           </p>
@@ -111,11 +111,11 @@ export const AgentDetail: React.FC<AgentDetailProps> = ({ agent, onBack, current
         <div className="mb-4 bg-dark-surface/50 rounded-xl border border-dark-border p-4">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-              <Terminal size={14} className="text-phantom-500" /> Test Task
+              <Terminal size={14} className="text-norn-500" /> Test Task
             </h3>
             <button
               onClick={() => setIsEditingTask(!isEditingTask)}
-              className="text-xs text-gray-500 hover:text-phantom-400 flex items-center gap-1 transition-colors"
+              className="text-xs text-gray-500 hover:text-norn-400 flex items-center gap-1 transition-colors"
             >
               <Pencil size={12} /> {isEditingTask ? 'Done' : 'Edit'}
             </button>
@@ -124,7 +124,7 @@ export const AgentDetail: React.FC<AgentDetailProps> = ({ agent, onBack, current
             <textarea
               value={taskText}
               onChange={(e) => setTaskText(e.target.value)}
-              className="w-full bg-dark-bg border border-dark-border rounded-lg p-3 text-sm text-gray-200 focus:outline-none focus:border-phantom-500 resize-none"
+              className="w-full bg-dark-bg border border-dark-border rounded-lg p-3 text-sm text-gray-200 focus:outline-none focus:border-norn-500 resize-none"
               rows={3}
               placeholder="Enter a test task for this agent..."
             />
@@ -149,7 +149,7 @@ export const AgentDetail: React.FC<AgentDetailProps> = ({ agent, onBack, current
           onClick={() => setActiveTab('overview')}
           className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
             activeTab === 'overview'
-              ? 'border-phantom-500 text-phantom-400'
+              ? 'border-norn-500 text-norn-400'
               : 'border-transparent text-gray-500 hover:text-gray-300'
           }`}
         >
@@ -162,7 +162,7 @@ export const AgentDetail: React.FC<AgentDetailProps> = ({ agent, onBack, current
           onClick={() => setActiveTab('results')}
           className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
             activeTab === 'results'
-              ? 'border-phantom-500 text-phantom-400'
+              ? 'border-norn-500 text-norn-400'
               : 'border-transparent text-gray-500 hover:text-gray-300'
           }`}
         >
@@ -175,7 +175,7 @@ export const AgentDetail: React.FC<AgentDetailProps> = ({ agent, onBack, current
           onClick={() => setActiveTab('steps')}
           className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
             activeTab === 'steps'
-              ? 'border-phantom-500 text-phantom-400'
+              ? 'border-norn-500 text-norn-400'
               : 'border-transparent text-gray-500 hover:text-gray-300'
           }`}
         >
@@ -188,7 +188,7 @@ export const AgentDetail: React.FC<AgentDetailProps> = ({ agent, onBack, current
           onClick={() => setActiveTab('analysis')}
           className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
             activeTab === 'analysis'
-              ? 'border-phantom-500 text-phantom-400'
+              ? 'border-norn-500 text-norn-400'
               : 'border-transparent text-gray-500 hover:text-gray-300'
           }`}
         >
@@ -206,7 +206,7 @@ export const AgentDetail: React.FC<AgentDetailProps> = ({ agent, onBack, current
           <div className="lg:col-span-2 flex flex-col bg-dark-surface/50 rounded-xl border border-dark-border overflow-hidden">
             <div className="p-4 border-b border-dark-border flex items-center justify-between bg-dark-surface">
               <h3 className="text-sm font-medium text-gray-200 flex items-center gap-2">
-                <Terminal size={16} className="text-phantom-500" />
+                <Terminal size={16} className="text-norn-500" />
                 Code Analysis
               </h3>
               <span className="text-xs text-gray-500 bg-dark-bg px-2 py-1 rounded border border-dark-border">
@@ -228,7 +228,7 @@ export const AgentDetail: React.FC<AgentDetailProps> = ({ agent, onBack, current
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span className="text-gray-500">Main File:</span>
-                        <span className="text-phantom-400 font-mono">{agent.main_file}</span>
+                        <span className="text-norn-400 font-mono">{agent.main_file}</span>
                       </div>
                       {agent.source === 'git' && (
                         <>
@@ -253,7 +253,7 @@ export const AgentDetail: React.FC<AgentDetailProps> = ({ agent, onBack, current
                       <div className="space-y-3">
                         {agent.discovery.tools.map((tool: any, idx: number) => (
                           <div key={idx} className="bg-dark-surface border border-dark-border rounded-lg p-3">
-                            <div className="text-sm font-semibold text-phantom-400 mb-1">{tool.name}</div>
+                            <div className="text-sm font-semibold text-norn-400 mb-1">{tool.name}</div>
                             <div className="text-xs text-gray-400 mb-2">{tool.description}</div>
                             {tool.parameters && tool.parameters.length > 0 && (
                               <div className="flex flex-wrap gap-1">
@@ -336,7 +336,7 @@ export const AgentDetail: React.FC<AgentDetailProps> = ({ agent, onBack, current
                   <Code size={14} /> Tools
                 </div>
                 <div className="flex items-end gap-2">
-                  <span className="text-3xl font-bold text-phantom-500">
+                  <span className="text-3xl font-bold text-norn-500">
                     {agent.discovery?.tools?.length || 0}
                   </span>
                 </div>
@@ -387,12 +387,12 @@ export const AgentDetail: React.FC<AgentDetailProps> = ({ agent, onBack, current
             </div>
 
             {/* AI Analysis Summary */}
-            <div className="bg-gradient-to-b from-phantom-900/20 to-dark-surface rounded-xl border border-phantom-900/30 overflow-hidden flex-1 flex flex-col">
-              <div className="p-3 border-b border-phantom-900/30 bg-phantom-900/10 flex items-center justify-between">
-                <h3 className="text-sm font-medium text-phantom-300 flex items-center gap-2">
+            <div className="bg-gradient-to-b from-norn-900/20 to-dark-surface rounded-xl border border-norn-900/30 overflow-hidden flex-1 flex flex-col">
+              <div className="p-3 border-b border-norn-900/30 bg-norn-900/10 flex items-center justify-between">
+                <h3 className="text-sm font-medium text-norn-300 flex items-center gap-2">
                   <Cpu size={16} /> Analysis Summary
                 </h3>
-                <span className="text-[10px] uppercase tracking-wider text-phantom-400/70 border border-phantom-500/20 px-2 py-0.5 rounded">Auto Generated</span>
+                <span className="text-[10px] uppercase tracking-wider text-norn-400/70 border border-norn-500/20 px-2 py-0.5 rounded">Auto Generated</span>
               </div>
 
               <div className="p-5 space-y-6 overflow-y-auto">
@@ -433,7 +433,7 @@ export const AgentDetail: React.FC<AgentDetailProps> = ({ agent, onBack, current
                     <ul className="space-y-2">
                       {agent.discovery.potential_issues.map((issue: any, idx: number) => (
                         <li key={idx} className="flex gap-2 text-sm text-gray-300 bg-dark-bg/50 p-2 rounded border border-dark-border/50">
-                          <span className="text-phantom-500">•</span>
+                          <span className="text-norn-500">•</span>
                           Fix {issue.type}: {issue.description}
                         </li>
                       ))}

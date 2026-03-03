@@ -83,13 +83,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ sessions, onSelectSession,
           <div className="bg-dark-surface border border-dark-border p-3 rounded-xl">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <div className="p-1.5 bg-phantom-900/30 rounded-lg text-phantom-400">
+                <div className="p-1.5 bg-norn-900/30 rounded-lg text-norn-400">
                   <Activity size={16} />
                 </div>
                 <span className="text-xs font-medium text-gray-400">Active Sessions</span>
               </div>
               {totalSessions > 0 && (
-                <span className="text-[10px] text-phantom-400 font-medium bg-phantom-950/50 px-1.5 py-0.5 rounded">Live</span>
+                <span className="text-[10px] text-norn-400 font-medium bg-norn-950/50 px-1.5 py-0.5 rounded">Live</span>
               )}
             </div>
             <div className="text-2xl font-bold text-white mb-0.5 pl-1">{totalSessions}</div>
@@ -154,16 +154,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ sessions, onSelectSession,
             <div 
               key={agent.id}
               onClick={() => onSelectAgent && onSelectAgent(agent.id)}
-              className="px-4 py-4 bg-dark-surface/50 hover:bg-dark-surface rounded-lg border border-dark-border hover:border-phantom-900/50 cursor-pointer transition-all group"
+              className="px-4 py-4 bg-dark-surface/50 hover:bg-dark-surface rounded-lg border border-dark-border hover:border-norn-900/50 cursor-pointer transition-all group"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 space-y-3">
                   {/* Header */}
                   <div className="flex items-center gap-3">
-                    <Github size={18} className="text-phantom-400 shrink-0" />
+                    <Github size={18} className="text-norn-400 shrink-0" />
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-semibold text-gray-100 group-hover:text-phantom-300 transition-colors">{agent.name}</span>
+                        <span className="font-semibold text-gray-100 group-hover:text-norn-300 transition-colors">{agent.name}</span>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                           agent.status === 'analyzed' ? 'bg-emerald-900/30 text-emerald-400 border border-emerald-900/50' :
                           agent.status === 'analyzing' ? 'bg-yellow-900/30 text-yellow-400 border border-yellow-900/50' :
@@ -188,7 +188,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ sessions, onSelectSession,
                       <div className="space-y-1.5">
                         <div className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Capabilities</div>
                         <div className="flex flex-wrap gap-2">
-                          <span className="text-xs px-2 py-1 rounded bg-phantom-950/30 text-phantom-400 border border-phantom-900/30">
+                          <span className="text-xs px-2 py-1 rounded bg-norn-950/30 text-norn-400 border border-norn-900/30">
                             {agent.discovery.tools?.length || 0} Tools
                           </span>
                           <span className="text-xs px-2 py-1 rounded bg-blue-950/30 text-blue-400 border border-blue-900/30">

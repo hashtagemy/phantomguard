@@ -51,15 +51,15 @@ const HandoffConnector: React.FC<{ data: string }> = ({ data }) => {
 
   return (
     <div className="flex flex-col items-center w-full">
-      <div className="w-px h-3 bg-phantom-900/40" />
+      <div className="w-px h-3 bg-norn-900/40" />
       <div className="w-full pl-9 pr-0">
         <button
           onClick={() => setExpanded(!expanded)}
-          className="w-full text-left bg-phantom-950/20 border border-phantom-900/30 rounded-lg px-3 py-2.5 hover:bg-phantom-950/30 transition-colors group"
+          className="w-full text-left bg-norn-950/20 border border-norn-900/30 rounded-lg px-3 py-2.5 hover:bg-norn-950/30 transition-colors group"
         >
           <div className="flex items-center gap-2 mb-1.5">
-            <MessageSquare size={11} className="text-phantom-400 flex-shrink-0" />
-            <span className="text-[10px] font-semibold text-phantom-400 uppercase tracking-wider">
+            <MessageSquare size={11} className="text-norn-400 flex-shrink-0" />
+            <span className="text-[10px] font-semibold text-norn-400 uppercase tracking-wider">
               Handoff
             </span>
             {isLong && (
@@ -73,16 +73,16 @@ const HandoffConnector: React.FC<{ data: string }> = ({ data }) => {
           </p>
         </button>
       </div>
-      <div className="w-px h-3 bg-phantom-900/40" />
-      <ArrowDown size={10} className="text-phantom-700" />
+      <div className="w-px h-3 bg-norn-900/40" />
+      <ArrowDown size={10} className="text-norn-700" />
     </div>
   );
 };
 
 const SimpleConnector: React.FC = () => (
   <div className="flex flex-col items-center">
-    <div className="w-px h-3 bg-phantom-900/40" />
-    <ArrowDown size={10} className="text-phantom-700" />
+    <div className="w-px h-3 bg-norn-900/40" />
+    <ArrowDown size={10} className="text-norn-700" />
   </div>
 );
 
@@ -101,7 +101,7 @@ const SwarmAnalysisPanel: React.FC<{ swarmId: string }> = ({ swarmId }) => {
 
   if (loading) {
     return (
-      <div className="bg-gradient-to-b from-phantom-900/20 to-dark-surface rounded-lg border border-phantom-900/30 p-4">
+      <div className="bg-gradient-to-b from-norn-900/20 to-dark-surface rounded-lg border border-norn-900/30 p-4">
         <p className="text-xs text-gray-500 animate-pulse">Analyzing pipeline...</p>
       </div>
     );
@@ -124,12 +124,12 @@ const SwarmAnalysisPanel: React.FC<{ swarmId: string }> = ({ swarmId }) => {
 
   return (
     <div className="space-y-3">
-      <div className="bg-gradient-to-b from-phantom-900/20 to-dark-surface rounded-lg border border-phantom-900/30 overflow-hidden">
-        <div className="p-3 border-b border-phantom-900/30 bg-phantom-900/10 flex items-center justify-between">
-          <h3 className="text-xs font-semibold text-phantom-300 flex items-center gap-2">
+      <div className="bg-gradient-to-b from-norn-900/20 to-dark-surface rounded-lg border border-norn-900/30 overflow-hidden">
+        <div className="p-3 border-b border-norn-900/30 bg-norn-900/10 flex items-center justify-between">
+          <h3 className="text-xs font-semibold text-norn-300 flex items-center gap-2">
             <Cpu size={13} /> Amazon Nova AI Evaluation
           </h3>
-          <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border text-phantom-400/70 border-phantom-500/20">
+          <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border text-norn-400/70 border-norn-500/20">
             AI Generated
           </span>
         </div>
@@ -156,8 +156,8 @@ const SwarmAnalysisPanel: React.FC<{ swarmId: string }> = ({ swarmId }) => {
                 {analysis.agent_assessments.map((a, idx) => (
                   <li key={idx} className="p-2 rounded-lg border bg-dark-bg/50 border-dark-border/50">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <span className="w-4 h-4 rounded-full bg-phantom-950/60 border border-phantom-900/50 flex items-center justify-center flex-shrink-0">
-                        <span className="text-[9px] font-bold text-phantom-300">{a.order}</span>
+                      <span className="w-4 h-4 rounded-full bg-norn-950/60 border border-norn-900/50 flex items-center justify-center flex-shrink-0">
+                        <span className="text-[9px] font-bold text-norn-300">{a.order}</span>
                       </span>
                       <span className="text-xs font-medium text-gray-200">{a.agent_name}</span>
                     </div>
@@ -201,7 +201,7 @@ const SwarmAnalysisPanel: React.FC<{ swarmId: string }> = ({ swarmId }) => {
               <ul className="space-y-1.5">
                 {analysis.recommendations.map((rec, idx) => (
                   <li key={idx} className="flex gap-2 text-xs text-gray-300 bg-dark-bg/50 p-2 rounded-lg border border-dark-border/50">
-                    <span className="text-phantom-500 flex-shrink-0">&bull;</span>
+                    <span className="text-norn-500 flex-shrink-0">&bull;</span>
                     <span>{rec}</span>
                   </li>
                 ))}
@@ -226,8 +226,8 @@ const SwarmCard: React.FC<{ swarm: Swarm; onSelectSession?: (id: string) => void
         className="w-full flex items-center gap-4 px-5 py-4 hover:bg-dark-hover transition-colors text-left"
         onClick={() => setExpanded(!expanded)}
       >
-        <div className="w-9 h-9 rounded-lg bg-phantom-950/40 border border-phantom-900/40 flex items-center justify-center flex-shrink-0">
-          <Network size={18} className="text-phantom-400" />
+        <div className="w-9 h-9 rounded-lg bg-norn-950/40 border border-norn-900/40 flex items-center justify-center flex-shrink-0">
+          <Network size={18} className="text-norn-400" />
         </div>
 
         <div className="flex-1 min-w-0">
@@ -264,7 +264,7 @@ const SwarmCard: React.FC<{ swarm: Swarm; onSelectSession?: (id: string) => void
               onClick={() => setActiveTab('pipeline')}
               className={`py-2.5 px-1 mr-6 text-xs font-medium border-b-2 transition-colors ${
                 activeTab === 'pipeline'
-                  ? 'border-phantom-400 text-phantom-300'
+                  ? 'border-norn-400 text-norn-300'
                   : 'border-transparent text-gray-500 hover:text-gray-300'
               }`}
             >
@@ -274,7 +274,7 @@ const SwarmCard: React.FC<{ swarm: Swarm; onSelectSession?: (id: string) => void
               onClick={() => setActiveTab('analysis')}
               className={`py-2.5 px-1 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
                 activeTab === 'analysis'
-                  ? 'border-phantom-400 text-phantom-300'
+                  ? 'border-norn-400 text-norn-300'
                   : 'border-transparent text-gray-500 hover:text-gray-300'
               }`}
             >
@@ -291,13 +291,13 @@ const SwarmCard: React.FC<{ swarm: Swarm; onSelectSession?: (id: string) => void
                   <React.Fragment key={agent.session_id}>
                     <div className="flex items-start gap-3">
                       <div className="flex flex-col items-center flex-shrink-0 pt-1 w-6">
-                        <div className="w-6 h-6 rounded-full bg-phantom-950/60 border border-phantom-900/50 flex items-center justify-center">
-                          <span className="text-xs font-bold text-phantom-300">{agent.swarm_order ?? idx + 1}</span>
+                        <div className="w-6 h-6 rounded-full bg-norn-950/60 border border-norn-900/50 flex items-center justify-center">
+                          <span className="text-xs font-bold text-norn-300">{agent.swarm_order ?? idx + 1}</span>
                         </div>
                       </div>
 
                       <div
-                        className={`flex-1 bg-dark-bg border border-dark-border rounded-lg px-4 py-3 ${onSelectSession && agent.session_id ? 'cursor-pointer hover:border-phantom-700 hover:bg-dark-surface transition-colors' : ''}`}
+                        className={`flex-1 bg-dark-bg border border-dark-border rounded-lg px-4 py-3 ${onSelectSession && agent.session_id ? 'cursor-pointer hover:border-norn-700 hover:bg-dark-surface transition-colors' : ''}`}
                         onClick={() => onSelectSession && agent.session_id && onSelectSession(agent.session_id)}
                       >
                         <div className="flex items-center justify-between gap-3 mb-1">
@@ -307,8 +307,8 @@ const SwarmCard: React.FC<{ swarm: Swarm; onSelectSession?: (id: string) => void
                               {agent.overall_quality}
                             </span>
                             {agent.status === 'running' && (
-                              <span className="flex items-center gap-1 text-xs text-phantom-400">
-                                <span className="animate-ping w-1.5 h-1.5 rounded-full bg-phantom-400 inline-block" />
+                              <span className="flex items-center gap-1 text-xs text-norn-400">
+                                <span className="animate-ping w-1.5 h-1.5 rounded-full bg-norn-400 inline-block" />
                                 Running
                               </span>
                             )}
@@ -340,7 +340,7 @@ const SwarmCard: React.FC<{ swarm: Swarm; onSelectSession?: (id: string) => void
                     {idx < swarm.agents.length - 1 && (
                       <div className="flex items-start gap-3 py-0.5">
                         <div className="w-6 flex-shrink-0 flex justify-center">
-                          <div className="w-px bg-phantom-900/40 h-full min-h-[8px]" />
+                          <div className="w-px bg-norn-900/40 h-full min-h-[8px]" />
                         </div>
                         <div className="flex-1 -mt-0.5">
                           {swarm.agents[idx + 1].handoff_input
@@ -427,8 +427,8 @@ export const SwarmView: React.FC<{ onSelectSession?: (id: string) => void }> = (
           </div>
           <h3 className="text-base font-medium text-gray-400 mb-2">No swarms yet</h3>
           <p className="text-sm text-gray-600 max-w-sm">
-            Use <code className="bg-dark-surface px-1.5 py-0.5 rounded text-phantom-300">swarm_id</code> in{' '}
-            <code className="bg-dark-surface px-1.5 py-0.5 rounded text-phantom-300">NornHook</code> to group
+            Use <code className="bg-dark-surface px-1.5 py-0.5 rounded text-norn-300">swarm_id</code> in{' '}
+            <code className="bg-dark-surface px-1.5 py-0.5 rounded text-norn-300">NornHook</code> to group
             multiple agents into a monitored pipeline.
           </p>
           <pre className="mt-4 text-left text-xs bg-dark-surface border border-dark-border rounded-lg p-4 text-gray-400 max-w-sm">

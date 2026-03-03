@@ -28,7 +28,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, size = 'md' })
       colorClass = 'bg-yellow-950/50 text-yellow-400 border-yellow-900/50 animate-pulse';
       break;
     case 'active':
-      colorClass = 'bg-phantom-950/50 text-phantom-400 border-phantom-900/50 animate-pulse';
+      colorClass = 'bg-norn-950/50 text-norn-400 border-norn-900/50 animate-pulse';
       break;
   }
 

@@ -92,7 +92,7 @@ export const SessionDetail: React.FC<SessionDetailProps> = ({ session, onBack, o
           onClick={() => setActiveTab('overview')}
           className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
             activeTab === 'overview'
-              ? 'border-phantom-500 text-phantom-400'
+              ? 'border-norn-500 text-norn-400'
               : 'border-transparent text-gray-500 hover:text-gray-300'
           }`}
         >
@@ -105,7 +105,7 @@ export const SessionDetail: React.FC<SessionDetailProps> = ({ session, onBack, o
           onClick={() => setActiveTab('steps')}
           className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
             activeTab === 'steps'
-              ? 'border-phantom-500 text-phantom-400'
+              ? 'border-norn-500 text-norn-400'
               : 'border-transparent text-gray-500 hover:text-gray-300'
           }`}
         >
@@ -118,7 +118,7 @@ export const SessionDetail: React.FC<SessionDetailProps> = ({ session, onBack, o
           onClick={() => setActiveTab('analysis')}
           className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
             activeTab === 'analysis'
-              ? 'border-phantom-500 text-phantom-400'
+              ? 'border-norn-500 text-norn-400'
               : 'border-transparent text-gray-500 hover:text-gray-300'
           }`}
         >

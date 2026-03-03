@@ -26,7 +26,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) =
       <div className="p-4 pb-2">
         <button
           onClick={() => onChangeView('add_agent')}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-phantom-600 hover:bg-phantom-500 text-white font-medium rounded-lg transition-colors shadow-lg shadow-phantom-900/20"
+          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-norn-600 hover:bg-norn-500 text-white font-medium rounded-lg transition-colors shadow-lg shadow-norn-900/20"
         >
           <Plus size={18} />
           <span>Add Agent</span>
@@ -44,11 +44,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) =
               onClick={() => onChangeView(item.id)}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 border
                 ${isActive
-                  ? 'bg-phantom-950/40 text-phantom-300 border-phantom-900/50 shadow-sm'
+                  ? 'bg-norn-950/40 text-norn-300 border-norn-900/50 shadow-sm'
                   : 'text-gray-400 hover:text-gray-100 hover:bg-dark-surface border-transparent'
                 }`}
             >
-              <item.icon size={18} className={isActive ? 'text-phantom-400' : 'text-gray-500'} />
+              <item.icon size={18} className={isActive ? 'text-norn-400' : 'text-gray-500'} />
               {item.label}
             </button>
           );

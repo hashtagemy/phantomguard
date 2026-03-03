@@ -107,7 +107,7 @@ export const BrowserAuditView: React.FC<BrowserAuditViewProps> = ({ sessions }) 
       {/* Header */}
       <div>
         <div className="flex items-center gap-3 mb-1">
-          <Globe size={22} className="text-phantom-400" />
+          <Globe size={22} className="text-norn-400" />
           <h1 className="text-xl font-bold text-white">Browser Audit</h1>
         </div>
         <p className="text-sm text-gray-500 ml-9">Nova Act shadow verification results</p>

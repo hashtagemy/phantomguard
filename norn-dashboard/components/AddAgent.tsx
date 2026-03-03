@@ -190,7 +190,7 @@ export const AddAgent: React.FC<AddAgentProps> = ({ onAgentAdded }) => {
           <button
             onClick={() => setActiveTab('github')}
             className={`flex-1 py-4 text-sm font-medium transition-colors flex items-center justify-center gap-2
-              ${activeTab === 'github' ? 'bg-dark-surface text-phantom-400 border-b-2 border-phantom-500' : 'bg-dark-bg/50 text-gray-500 hover:text-gray-300'}`}
+              ${activeTab === 'github' ? 'bg-dark-surface text-norn-400 border-b-2 border-norn-500' : 'bg-dark-bg/50 text-gray-500 hover:text-gray-300'}`}
           >
             <Github size={18} />
             GitHub Repository
@@ -198,7 +198,7 @@ export const AddAgent: React.FC<AddAgentProps> = ({ onAgentAdded }) => {
           <button
             onClick={() => setActiveTab('upload')}
             className={`flex-1 py-4 text-sm font-medium transition-colors flex items-center justify-center gap-2
-              ${activeTab === 'upload' ? 'bg-dark-surface text-phantom-400 border-b-2 border-phantom-500' : 'bg-dark-bg/50 text-gray-500 hover:text-gray-300'}`}
+              ${activeTab === 'upload' ? 'bg-dark-surface text-norn-400 border-b-2 border-norn-500' : 'bg-dark-bg/50 text-gray-500 hover:text-gray-300'}`}
           >
             <Upload size={18} />
             Upload ZIP
@@ -233,7 +233,7 @@ export const AddAgent: React.FC<AddAgentProps> = ({ onAgentAdded }) => {
                   value={agentName}
                   onChange={(e) => setAgentName(e.target.value)}
                   placeholder="e.g. My Suite (optional)"
-                  className="w-full bg-dark-bg border border-dark-border rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-phantom-500 transition-colors mb-4"
+                  className="w-full bg-dark-bg border border-dark-border rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-norn-500 transition-colors mb-4"
                   disabled={loading}
                 />
               </div>
@@ -247,7 +247,7 @@ export const AddAgent: React.FC<AddAgentProps> = ({ onAgentAdded }) => {
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
                     placeholder="https://github.com/username/agent-repo"
-                    className="w-full bg-dark-bg border border-dark-border rounded-lg pl-10 pr-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-phantom-500 transition-colors"
+                    className="w-full bg-dark-bg border border-dark-border rounded-lg pl-10 pr-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-norn-500 transition-colors"
                     disabled={loading}
                   />
                 </div>
@@ -267,7 +267,7 @@ export const AddAgent: React.FC<AddAgentProps> = ({ onAgentAdded }) => {
                     value={mainFile}
                     onChange={(e) => setMainFile(e.target.value)}
                     placeholder="e.g. personal_assistant.py"
-                    className="w-full bg-dark-bg border border-dark-border rounded-lg pl-10 pr-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-phantom-500 transition-colors"
+                    className="w-full bg-dark-bg border border-dark-border rounded-lg pl-10 pr-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-norn-500 transition-colors"
                     disabled={loading}
                   />
                 </div>
@@ -276,9 +276,9 @@ export const AddAgent: React.FC<AddAgentProps> = ({ onAgentAdded }) => {
                 </p>
               </div>
 
-              <div className="bg-phantom-950/20 border border-phantom-900/30 rounded-lg p-4 flex gap-3">
-                <AlertCircle className="text-phantom-400 shrink-0" size={20} />
-                <div className="text-sm text-phantom-200">
+              <div className="bg-norn-950/20 border border-norn-900/30 rounded-lg p-4 flex gap-3">
+                <AlertCircle className="text-norn-400 shrink-0" size={20} />
+                <div className="text-sm text-norn-200">
                   Ensure the repository is public or you have granted Norn access to your private repositories.
                 </div>
               </div>
@@ -290,7 +290,7 @@ export const AddAgent: React.FC<AddAgentProps> = ({ onAgentAdded }) => {
                   className={`px-6 py-2 font-medium rounded-lg transition-colors flex items-center gap-2
                     ${loading || !url
                       ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-                      : 'bg-phantom-600 hover:bg-phantom-500 text-white'}`}
+                      : 'bg-norn-600 hover:bg-norn-500 text-white'}`}
                 >
                   {loading && <Loader2 size={16} className="animate-spin" />}
                   {loading ? 'Importing...' : 'Import Repository'}
@@ -313,7 +313,7 @@ export const AddAgent: React.FC<AddAgentProps> = ({ onAgentAdded }) => {
                       {agent.discovery && (
                         <div className="grid grid-cols-4 gap-2">
                           <div className="text-center">
-                            <div className="text-xl font-bold text-phantom-400">
+                            <div className="text-xl font-bold text-norn-400">
                               {agent.discovery.tools?.length || 0}
                             </div>
                             <div className="text-xs text-gray-500">Tools</div>
@@ -366,7 +366,7 @@ export const AddAgent: React.FC<AddAgentProps> = ({ onAgentAdded }) => {
                   value={agentName}
                   onChange={(e) => setAgentName(e.target.value)}
                   placeholder="My Trading Bot"
-                  className="w-full bg-dark-bg border border-dark-border rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-phantom-500 transition-colors mb-4"
+                  className="w-full bg-dark-bg border border-dark-border rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-norn-500 transition-colors mb-4"
                   disabled={loading}
                 />
               </div>
@@ -377,7 +377,7 @@ export const AddAgent: React.FC<AddAgentProps> = ({ onAgentAdded }) => {
                 onDrop={handleDrop}
                 className={`border-2 border-dashed rounded-xl p-10 text-center transition-all cursor-pointer
                   ${isDragging 
-                    ? 'border-phantom-500 bg-phantom-950/10' 
+                    ? 'border-norn-500 bg-norn-950/10' 
                     : 'border-dark-border hover:border-gray-600 bg-dark-bg/50'}`}
               >
                 <input
@@ -390,7 +390,7 @@ export const AddAgent: React.FC<AddAgentProps> = ({ onAgentAdded }) => {
                 
                 {file ? (
                   <div className="flex flex-col items-center">
-                    <div className="w-16 h-16 bg-phantom-900/30 text-phantom-400 rounded-full flex items-center justify-center mb-4">
+                    <div className="w-16 h-16 bg-norn-900/30 text-norn-400 rounded-full flex items-center justify-center mb-4">
                       <FileCode size={32} />
                     </div>
                     <div className="text-lg font-medium text-white mb-1">{file.name}</div>
@@ -411,7 +411,7 @@ export const AddAgent: React.FC<AddAgentProps> = ({ onAgentAdded }) => {
                       Drop your ZIP file here
                     </div>
                     <div className="text-sm text-gray-500">
-                      or <span className="text-phantom-400 hover:underline">browse files</span>
+                      or <span className="text-norn-400 hover:underline">browse files</span>
                     </div>
                   </label>
                 )}
@@ -428,7 +428,7 @@ export const AddAgent: React.FC<AddAgentProps> = ({ onAgentAdded }) => {
                   disabled={!file || !agentName || loading}
                   className={`px-6 py-2 font-medium rounded-lg transition-colors flex items-center gap-2
                     ${file && agentName && !loading
-                      ? 'bg-phantom-600 hover:bg-phantom-500 text-white' 
+                      ? 'bg-norn-600 hover:bg-norn-500 text-white' 
                       : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
                 >
                   {loading && <Loader2 size={16} className="animate-spin" />}
@@ -447,7 +447,7 @@ export const AddAgent: React.FC<AddAgentProps> = ({ onAgentAdded }) => {
           <button 
             onClick={loadAgents}
             disabled={loadingAgents}
-            className="text-sm text-phantom-400 hover:text-phantom-300 flex items-center gap-2"
+            className="text-sm text-norn-400 hover:text-norn-300 flex items-center gap-2"
           >
             {loadingAgents ? <Loader2 size={14} className="animate-spin" /> : null}
             Refresh
@@ -464,7 +464,7 @@ export const AddAgent: React.FC<AddAgentProps> = ({ onAgentAdded }) => {
         ) : (
           <div className="space-y-3">
             {registeredAgents.map((agent) => (
-              <div key={agent.id} className="bg-dark-surface border border-dark-border rounded-xl p-4 hover:border-phantom-900/50 transition-colors">
+              <div key={agent.id} className="bg-dark-surface border border-dark-border rounded-xl p-4 hover:border-norn-900/50 transition-colors">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
@@ -495,7 +495,7 @@ export const AddAgent: React.FC<AddAgentProps> = ({ onAgentAdded }) => {
                       <div className="flex items-center gap-3 mt-3 pt-3 border-t border-dark-border">
                         <div className="text-xs">
                           <span className="text-gray-500">Tools: </span>
-                          <span className="text-phantom-400 font-medium">{agent.discovery.tools?.length || 0}</span>
+                          <span className="text-norn-400 font-medium">{agent.discovery.tools?.length || 0}</span>
                         </div>
                         <div className="text-xs">
                           <span className="text-gray-500">Functions: </span>

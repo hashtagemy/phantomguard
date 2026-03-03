@@ -99,7 +99,7 @@ export const AuditLogView: React.FC = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-              <FileText size={20} className="text-phantom-400" /> Audit Logs
+              <FileText size={20} className="text-norn-400" /> Audit Logs
             </h1>
             <p className="text-sm text-gray-400">{events.length} event{events.length !== 1 ? 's' : ''} across all sessions</p>
           </div>
@@ -108,7 +108,7 @@ export const AuditLogView: React.FC = () => {
               onClick={() => setAutoRefresh(!autoRefresh)}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
                 autoRefresh
-                  ? 'bg-phantom-950/30 border-phantom-900/40 text-phantom-300'
+                  ? 'bg-norn-950/30 border-norn-900/40 text-norn-300'
                   : 'bg-dark-surface border-dark-border text-gray-400 hover:text-gray-300'
               }`}
             >
@@ -168,7 +168,7 @@ export const AuditLogView: React.FC = () => {
               key={type}
               onClick={() => setFilterType(type)}
               className={`px-2.5 py-1 text-[11px] font-medium rounded transition-colors ${
-                filterType === type ? 'bg-phantom-600 text-white' : 'text-gray-400 hover:text-gray-300'
+                filterType === type ? 'bg-norn-600 text-white' : 'text-gray-400 hover:text-gray-300'
               }`}
             >
               {type === 'all' ? 'All' : type.replace(/_/g, ' ')}
@@ -181,7 +181,7 @@ export const AuditLogView: React.FC = () => {
               key={sev}
               onClick={() => setFilterSeverity(sev)}
               className={`px-2.5 py-1 text-[11px] font-medium rounded transition-colors ${
-                filterSeverity === sev ? 'bg-phantom-600 text-white' : 'text-gray-400 hover:text-gray-300'
+                filterSeverity === sev ? 'bg-norn-600 text-white' : 'text-gray-400 hover:text-gray-300'
               }`}
             >
               {sev === 'all' ? 'All Severity' : sev}
@@ -251,7 +251,7 @@ export const AuditLogView: React.FC = () => {
                   {/* Expanded Detail */}
                   {isExpanded && event.detail && (
                     <div className="px-4 py-3 bg-dark-bg/50 border-b border-dark-border/50">
-                      <div className="ml-[140px] pl-3 border-l-2 border-phantom-900/30">
+                      <div className="ml-[140px] pl-3 border-l-2 border-norn-900/30">
                         <div className="text-xs text-gray-500 uppercase tracking-wider mb-1 font-semibold">Detail</div>
                         <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap">{event.detail}</p>
                         <div className="mt-2 text-[10px] text-gray-600 font-mono">Session: {event.session_id}</div>

@@ -310,7 +310,7 @@ const App: React.FC = () => {
                 <p className="text-sm text-gray-400 mb-4">This agent may still be loading or was removed.</p>
                 <button
                   onClick={() => { setCurrentView('dashboard'); setSelectedAgentId(null); setActiveRunSessionId(null); }}
-                  className="px-4 py-2 bg-phantom-600 hover:bg-phantom-500 text-white text-sm rounded-lg transition-colors"
+                  className="px-4 py-2 bg-norn-600 hover:bg-norn-500 text-white text-sm rounded-lg transition-colors"
                 >
                   Return to Overview
                 </button>
@@ -362,22 +362,22 @@ const App: React.FC = () => {
           </div>
           <div className="flex items-center gap-4">
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${
-              systemStatus === 'online' ? 'bg-phantom-950/20 border-phantom-900/30' :
+              systemStatus === 'online' ? 'bg-norn-950/20 border-norn-900/30' :
               systemStatus === 'offline' ? 'bg-red-950/20 border-red-900/30' :
               'bg-yellow-950/20 border-yellow-900/30'
             }`}>
                <span className="relative flex h-2 w-2">
                   {systemStatus === 'online' && (
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-phantom-400 opacity-75"></span>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-norn-400 opacity-75"></span>
                   )}
                   <span className={`relative inline-flex rounded-full h-2 w-2 ${
-                    systemStatus === 'online' ? 'bg-phantom-500' :
+                    systemStatus === 'online' ? 'bg-norn-500' :
                     systemStatus === 'offline' ? 'bg-red-500' :
                     'bg-yellow-500'
                   }`}></span>
                 </span>
                 <span className={`text-xs font-medium ${
-                  systemStatus === 'online' ? 'text-phantom-300' :
+                  systemStatus === 'online' ? 'text-norn-300' :
                   systemStatus === 'offline' ? 'text-red-400' :
                   'text-yellow-400'
                 }`}>

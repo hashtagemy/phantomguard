@@ -47,15 +47,15 @@ export const AIAnalysisPanel: React.FC<AIAnalysisPanelProps> = ({ session }) => 
 
   return (
     <div className="space-y-3">
-      <div className="bg-gradient-to-b from-phantom-900/20 to-dark-surface rounded-lg border border-phantom-900/30 overflow-hidden">
-        <div className="p-3 border-b border-phantom-900/30 bg-phantom-900/10 flex items-center justify-between">
-          <h3 className="text-xs font-semibold text-phantom-300 flex items-center gap-2">
+      <div className="bg-gradient-to-b from-norn-900/20 to-dark-surface rounded-lg border border-norn-900/30 overflow-hidden">
+        <div className="p-3 border-b border-norn-900/30 bg-norn-900/10 flex items-center justify-between">
+          <h3 className="text-xs font-semibold text-norn-300 flex items-center gap-2">
             <Cpu size={13} /> Amazon Nova AI Evaluation
           </h3>
           <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border ${
             isTerminated && !hasAiEval
               ? 'text-red-400/70 border-red-500/20'
-              : 'text-phantom-400/70 border-phantom-500/20'
+              : 'text-norn-400/70 border-norn-500/20'
           }`}>
             {isTerminated && !hasAiEval ? 'Terminated' : 'AI Generated'}
           </span>
@@ -177,7 +177,7 @@ export const AIAnalysisPanel: React.FC<AIAnalysisPanelProps> = ({ session }) => 
               <ul className="space-y-1.5">
                 {session.recommendations.map((rec, idx) => (
                   <li key={idx} className="flex gap-2 text-xs text-gray-300 bg-dark-bg/50 p-2 rounded-lg border border-dark-border/50">
-                    <span className="text-phantom-500 shrink-0">&bull;</span>
+                    <span className="text-norn-500 shrink-0">&bull;</span>
                     <span>{rec}</span>
                   </li>
                 ))}

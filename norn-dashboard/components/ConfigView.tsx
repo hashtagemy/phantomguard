@@ -130,7 +130,7 @@ export const ConfigView: React.FC = () => {
       <div className="flex-none flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-            <Settings size={20} className="text-phantom-400" /> Configuration
+            <Settings size={20} className="text-norn-400" /> Configuration
           </h1>
           <p className="text-sm text-gray-400">Norn monitoring and security settings</p>
         </div>
@@ -145,7 +145,7 @@ export const ConfigView: React.FC = () => {
             disabled={!dirty || saving}
             className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
               dirty
-                ? 'bg-phantom-600 hover:bg-phantom-500 text-white'
+                ? 'bg-norn-600 hover:bg-norn-500 text-white'
                 : 'bg-dark-surface border border-dark-border text-gray-500 cursor-not-allowed'
             }`}
           >
@@ -159,7 +159,7 @@ export const ConfigView: React.FC = () => {
       {runtime && (
         <div className="flex-none bg-dark-surface/50 border border-dark-border rounded-xl p-4">
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-            <Server size={14} className="text-phantom-400" /> System Information
+            <Server size={14} className="text-norn-400" /> System Information
           </h3>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
             <div>
@@ -197,7 +197,7 @@ export const ConfigView: React.FC = () => {
         {/* Guard Mode */}
         <div className="bg-dark-surface/50 border border-dark-border rounded-xl p-4">
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-            <Shield size={14} className="text-phantom-400" /> Guard Mode
+            <Shield size={14} className="text-norn-400" /> Guard Mode
           </h3>
           <div className="space-y-2">
             {GUARD_MODES.map((mode) => {
@@ -209,16 +209,16 @@ export const ConfigView: React.FC = () => {
                   onClick={() => updateField('guard_mode', mode.value)}
                   className={`w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-colors ${
                     isActive
-                      ? 'bg-phantom-950/30 border-phantom-900/50 text-phantom-300'
+                      ? 'bg-norn-950/30 border-norn-900/50 text-norn-300'
                       : 'bg-dark-bg/30 border-dark-border text-gray-400 hover:text-gray-300 hover:border-gray-600'
                   }`}
                 >
-                  <Icon size={16} className={isActive ? 'text-phantom-400' : 'text-gray-500'} />
+                  <Icon size={16} className={isActive ? 'text-norn-400' : 'text-gray-500'} />
                   <div>
                     <div className="text-sm font-medium">{mode.label}</div>
                     <div className="text-xs text-gray-500">{mode.desc}</div>
                   </div>
-                  {isActive && <CheckCircle2 size={14} className="ml-auto text-phantom-400" />}
+                  {isActive && <CheckCircle2 size={14} className="ml-auto text-norn-400" />}
                 </button>
               );
             })}
@@ -228,7 +228,7 @@ export const ConfigView: React.FC = () => {
         {/* AI Evaluation */}
         <div className="bg-dark-surface/50 border border-dark-border rounded-xl p-4">
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-            <Brain size={14} className="text-phantom-400" /> AI Evaluation
+            <Brain size={14} className="text-norn-400" /> AI Evaluation
           </h3>
           <div className="space-y-4">
             <ToggleField
@@ -258,7 +258,7 @@ export const ConfigView: React.FC = () => {
         {/* Loop Detection */}
         <div className="bg-dark-surface/50 border border-dark-border rounded-xl p-4">
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-            <Repeat size={14} className="text-phantom-400" /> Loop Detection
+            <Repeat size={14} className="text-norn-400" /> Loop Detection
           </h3>
           <div className="space-y-4">
             <NumberField
@@ -303,7 +303,7 @@ export const ConfigView: React.FC = () => {
         {/* Thresholds */}
         <div className="bg-dark-surface/50 border border-dark-border rounded-xl p-4">
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-            <Crosshair size={14} className="text-phantom-400" /> Scoring Thresholds
+            <Crosshair size={14} className="text-norn-400" /> Scoring Thresholds
           </h3>
           <div className="space-y-4">
             <NumberField
@@ -362,7 +362,7 @@ const ToggleField: React.FC<{
     <button
       onClick={() => onChange(!value)}
       className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${
-        value ? 'bg-phantom-600' : 'bg-gray-700'
+        value ? 'bg-norn-600' : 'bg-gray-700'
       }`}
     >
       <span
@@ -401,7 +401,7 @@ const NumberField: React.FC<{
         const n = parseInt(e.target.value, 10);
         if (!isNaN(n) && n >= min && n <= max) onChange(n);
       }}
-      className="w-20 px-2 py-1 text-sm font-mono text-right bg-dark-bg border border-dark-border rounded-lg text-gray-200 focus:border-phantom-600 focus:outline-none shrink-0"
+      className="w-20 px-2 py-1 text-sm font-mono text-right bg-dark-bg border border-dark-border rounded-lg text-gray-200 focus:border-norn-600 focus:outline-none shrink-0"
     />
   </div>
 );
