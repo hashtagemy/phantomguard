@@ -15,7 +15,8 @@ import os
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 # ── Router imports ────────────────────────────────────────────────────────────
 from norn.routers import (
@@ -63,10 +64,6 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": "Internal server error", "error_type": type(exc).__name__},
     )
 
-
-import os
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 
 # ── Health endpoint ───────────────────────────────────────────────────────────
 @app.get("/api/health")
@@ -117,6 +114,7 @@ if os.path.exists(frontend_dist):
         if os.path.exists(filepath) and os.path.isfile(filepath):
             return FileResponse(filepath)
         return FileResponse(os.path.join(frontend_dist, "index.html"))
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
