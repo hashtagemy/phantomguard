@@ -1,92 +1,96 @@
-name: Auto Release
+name: Publish to PyPI
 
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    branches: [main]
+    paths:
+      - "norn/**"
+      - "pyproject.toml"
 
 permissions:
   contents: write
-  packages: write
   id-token: write
 
 jobs:
-  auto-release:
+  publish:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Fetch all tags
-      run: |
-        git fetch --tags --force
-        git describe --tags --always
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: "3.10"
+      - name: Install build tools
+        run: pip install build twine
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install build twine
+      - name: Extract version from pyproject.toml
+        id: version
+        run: |
+          VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
 
-    - name: Extract version from tag
-      id: get_version
-      run: |
-        VERSION=${GITHUB_REF#refs/tags/v}
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
-        echo "Version: $VERSION"
+      - name: Check if version already exists on PyPI
+        id: check
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://pypi.org/pypi/norn-sdk/${{ steps.version.outputs.version }}/json)
+          if [ "$STATUS" = "200" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Version ${{ steps.version.outputs.version }} already on PyPI — skipping publish"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Version ${{ steps.version.outputs.version }} not on PyPI — will publish"
+          fi
 
-    - name: Build package
-      env:
-        SETUPTOOLS_SCM_PRETEND_VERSION: ${{ steps.get_version.outputs.version }}
-      run: |
-        python -m build
+      - name: Build package
+        if: steps.check.outputs.exists == 'false'
+        run: python -m build
 
-    - name: Publish to PyPI
-      env:
-        TWINE_USERNAME: __token__
-        TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-      run: |
-        twine upload dist/*
+      - name: Publish to PyPI
+        if: steps.check.outputs.exists == 'false'
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: twine upload dist/*
 
-    - name: Create GitHub Release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref }}
-        release_name: Norn v${{ steps.get_version.outputs.version }}
-        body: |
-          ## 📄 Norn v${{ steps.get_version.outputs.version }}
-          
-          ### 📦 Installation
-          ```bash
-          pip install norn-sdk==${{ steps.get_version.outputs.version }}
-          ```
-          
-          ### 🔄 Upgrade
-          ```bash
-          pip install --upgrade norn-sdk
-          ```
-          
-          ### 📋 Changes
-          This release includes the latest changes tagged as v${{ steps.get_version.outputs.version }}.
-          
-          **Full Changelog**: https://github.com/hashtagemy/norn/releases
-        draft: false
-        prerelease: false
+      - name: Create git tag
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          git tag "v${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}" || true
 
-    - name: Summary
-      run: |
-        echo "## 🎉 Release Summary" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "- **Version:** v${{ steps.get_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **PyPI:** https://pypi.org/project/norn-sdk/${{ steps.get_version.outputs.version }}/" >> $GITHUB_STEP_SUMMARY
-        echo "- **GitHub Release:** https://github.com/hashtagemy/norn/releases/tag/v${{ steps.get_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+      - name: Create GitHub Release
+        if: steps.check.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Norn v${{ steps.version.outputs.version }}
+          body: |
+            ## Norn v${{ steps.version.outputs.version }}
+
+            ### Installation
+            ```bash
+            pip install norn-sdk==${{ steps.version.outputs.version }}
+            ```
+
+            ### Upgrade
+            ```bash
+            pip install --upgrade norn-sdk
+            ```
+          draft: false
+          prerelease: false
+
+      - name: Summary
+        run: |
+          if [ "${{ steps.check.outputs.exists }}" = "true" ]; then
+            echo "## Skipped — v${{ steps.version.outputs.version }} already on PyPI" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## Published v${{ steps.version.outputs.version }} to PyPI" >> $GITHUB_STEP_SUMMARY
+            echo "- **PyPI:** https://pypi.org/project/norn-sdk/${{ steps.version.outputs.version }}/" >> $GITHUB_STEP_SUMMARY
+          fi
