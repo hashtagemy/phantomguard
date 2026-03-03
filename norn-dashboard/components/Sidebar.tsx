@@ -42,10 +42,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) =
             <button
               key={item.id}
               onClick={() => onChangeView(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium outline-none border
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium outline-none
                 ${isActive
-                  ? 'bg-norn-950/40 text-norn-300 border-norn-900/50 shadow-sm'
-                  : 'text-gray-400 hover:text-gray-100 hover:bg-dark-surface border-transparent'
+                  ? 'bg-norn-950/40 text-norn-300 ring-1 ring-norn-900/50 shadow-sm'
+                  : 'text-gray-400 hover:text-gray-100 hover:bg-dark-surface'
                 }`}
             >
               <item.icon size={18} className={isActive ? 'text-norn-400' : 'text-gray-500'} />
