@@ -77,16 +77,6 @@ Shadow browser verification powered by Nova Act:
 
 ## 🚀 Quick Start
 
-### Option 1: Docker
-Run the entire platform (backend & frontend) with a single command:
-```bash
-git clone https://github.com/hashtagemy/norn.git
-cd norn
-docker compose up --build
-```
-Open **http://localhost:8000** — the dashboard will be live.
-
-### Option 2: Manual Local Development
 ```bash
 # Clone repository
 git clone https://github.com/hashtagemy/norn.git
@@ -110,7 +100,7 @@ cd norn-dashboard && npm run dev
 ```
 Open **http://localhost:3000** for the dashboard.
 
-### Option 3: Install via PyPI
+### Install via PyPI
 To use Norn inside your own Python projects without the dashboard:
 ```bash
 pip install norn-sdk

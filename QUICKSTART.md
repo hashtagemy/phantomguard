@@ -15,28 +15,7 @@
 
 ---
 
-## 1. Quick Start with Docker
-
-Run the entire Norn platform (frontend + backend) with a single command.
-
-```bash
-git clone https://github.com/hashtagemy/norn.git
-cd norn
-
-# Configure environment variables (Required for AWS/Nova models)
-cp .env.example .env
-# Edit .env and add your AWS credentials!
-
-# Build and start the container
-docker compose up --build
-```
-Once it's running, open your browser to **http://localhost:8000** to see the dashboard.
-
----
-
-## 2. Manual Local Installation
-
-If you prefer to run the services separately without Docker:
+## 1. Installation
 
 ```bash
 git clone https://github.com/hashtagemy/norn.git
@@ -62,7 +41,7 @@ cd ..
 
 ---
 
-## 3. Using Norn inside scripts (PyPI)
+## 2. Using Norn inside scripts (PyPI)
 
 If you just want to use the Norn library (`NornHook`, etc.) to monitor your own agents safely, without running a local dashboard, you can install the SDK via PyPI:
 
@@ -72,7 +51,7 @@ pip install norn-sdk
 
 ---
 
-## 3. Configure Environment (Manual mode)
+## 3. Configure Environment
 
 ```bash
 cp .env.example .env
@@ -91,7 +70,7 @@ AWS_DEFAULT_REGION=us-east-1
 
 ---
 
-## 4. Start the Backend (Manual mode)
+## 4. Start the Backend
 
 ```bash
 source .venv/bin/activate
@@ -107,9 +86,9 @@ curl http://localhost:8000/
 
 ---
 
-## 5. Start the Dashboard (Manual mode)
+## 5. Start the Dashboard
 
-If you used the **Manual Local Installation** (Option 2), open a new terminal:
+Open a new terminal:
 
 ```bash
 cd norn-dashboard
