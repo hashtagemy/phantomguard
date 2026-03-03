@@ -15,9 +15,9 @@
 
 ---
 
-## 1. Quick Start with Docker (Recommended)
+## 1. Quick Start with Docker
 
-The easiest way to run the entire Norn platform (frontend + backend) is using Docker.
+Run the entire Norn platform (frontend + backend) with a single command.
 
 ```bash
 git clone https://github.com/hashtagemy/norn.git

@@ -77,7 +77,7 @@ Shadow browser verification powered by Nova Act:
 
 ## 🚀 Quick Start
 
-### Option 1: Docker (Recommended)
+### Option 1: Docker
 Run the entire platform (backend & frontend) with a single command:
 ```bash
 git clone https://github.com/hashtagemy/norn.git
