@@ -9,9 +9,9 @@ export default {
   theme: {
     extend: {
       colors: {
-        'dark-bg': '#0a0a0f',
-        'dark-surface': '#13131a',
-        'dark-border': '#1f1f28',
+        'dark-bg': '#09090b',
+        'dark-surface': '#18181b',
+        'dark-border': '#27272a',
         'norn': {
           50: '#f0fdf4',
           100: '#dcfce7',
@@ -29,6 +29,9 @@ export default {
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
+      },
+      animation: {
+        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
       },
     },
   },
