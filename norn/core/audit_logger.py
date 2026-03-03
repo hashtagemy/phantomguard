@@ -24,6 +24,10 @@ from norn.models.schemas import (
 
 logger = logging.getLogger("norn.audit")
 
+# Anchor log directory to the project root (not CWD) so that hook-based
+# agents running from arbitrary directories still write to the central log.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
 
 class LogStore(Protocol):
     """Pluggable storage backend for audit logs."""
@@ -45,7 +49,8 @@ class LocalFileStore:
 
     def __init__(self, base_dir: str | None = None):
         import os
-        self.base = Path(base_dir or os.environ.get("NORN_LOG_DIR", "norn_logs")).resolve()
+        _default = str(_PROJECT_ROOT / "norn_logs")
+        self.base = Path(base_dir or os.environ.get("NORN_LOG_DIR", _default)).resolve()
         self.steps_dir = self.base / "steps"
         self.issues_dir = self.base / "issues"
         self.sessions_dir = self.base / "sessions"

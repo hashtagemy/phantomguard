@@ -317,16 +317,19 @@ const App: React.FC = () => {
               </div>
             </div>
           );
+          const agentSessions = sessions
+              .filter(s => s.agentName === agent.name)
+              .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
           const currentSession = activeRunSessionId
             ? sessions.find(s => s.id === activeRunSessionId)
-            : sessions
-                .filter(s => s.agentName === agent.name)
-                .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())[0];
+            : agentSessions[0];
           return (
             <AgentDetail
               agent={agent}
               onBack={() => { setCurrentView('dashboard'); setActiveRunSessionId(null); }}
               currentSession={currentSession}
+              allSessions={agentSessions}
+              onSessionSelect={setActiveRunSessionId}
               onSessionStart={setActiveRunSessionId}
             />
           );

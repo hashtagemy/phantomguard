@@ -109,10 +109,11 @@ async def verify_api_key(request: Request):
 
 
 # ── Paths & Config Constants ─────────────────────────────
-# All paths derived from one env-configurable root.
-# .resolve() converts to absolute path at startup — prevents os.chdir() in
-# in-process agent execution from breaking file reads in other threads.
-LOGS_DIR = Path(os.environ.get("NORN_LOG_DIR", "norn_logs")).resolve()
+# All paths derived from one env-configurable root, anchored to the project
+# root via __file__ so that CWD changes (e.g. in-process agent execution)
+# never misdirect log writes.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+LOGS_DIR = Path(os.environ.get("NORN_LOG_DIR", str(_PROJECT_ROOT / "norn_logs"))).resolve()
 SESSIONS_DIR = LOGS_DIR / "sessions"
 REGISTRY_FILE = LOGS_DIR / "agents_registry.json"
 CONFIG_FILE = LOGS_DIR / "config.json"

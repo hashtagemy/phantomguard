@@ -11,10 +11,12 @@ interface AgentDetailProps {
   agent: any;
   onBack: () => void;
   currentSession?: Session;
+  allSessions?: Session[];
+  onSessionSelect?: (sessionId: string) => void;
   onSessionStart?: (sessionId: string) => void;
 }
 
-export const AgentDetail: React.FC<AgentDetailProps> = ({ agent, onBack, currentSession, onSessionStart }) => {
+export const AgentDetail: React.FC<AgentDetailProps> = ({ agent, onBack, currentSession, allSessions, onSessionSelect, onSessionStart }) => {
   const [isRunning, setIsRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const [taskText, setTaskText] = useState<string>(agent.task_description || '');
@@ -181,7 +183,7 @@ export const AgentDetail: React.FC<AgentDetailProps> = ({ agent, onBack, current
         >
           <div className="flex items-center gap-2">
             <Terminal size={16} />
-            Execution Steps{currentSession ? ` (${currentSession.steps.length})` : ''}
+            Execution Steps{allSessions && allSessions.length > 0 ? ` (${allSessions.reduce((sum, s) => sum + s.steps.length, 0)})` : currentSession ? ` (${currentSession.steps.length})` : ''}
           </div>
         </button>
         <button
@@ -449,30 +451,36 @@ export const AgentDetail: React.FC<AgentDetailProps> = ({ agent, onBack, current
       {/* Monitoring Tabs — session required */}
       {activeTab !== 'overview' && (
         <div>
-          {!currentSession ? (
+          {(!allSessions || allSessions.length === 0) && !currentSession ? (
             <div className="py-16 text-center text-gray-500">
               <Activity size={32} className="mx-auto mb-3 opacity-30" />
               <p className="text-sm">No session yet. Run the agent to see results here.</p>
             </div>
           ) : (
-            <>
-              {/* Session header */}
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <StatusBadge status={currentSession.status} />
-                  {currentSession.status === 'completed' && (
-                    <span className="text-xs text-gray-500">
-                      Completed: {new Date(currentSession.startTime).toLocaleString()}
-                    </span>
-                  )}
-                </div>
-                <span className="text-xs text-gray-600 font-mono">{currentSession.id}</span>
-              </div>
+            <div className="space-y-6">
+              {(allSessions && allSessions.length > 0 ? allSessions : currentSession ? [currentSession] : []).map((session) => (
+                <div key={session.id} className="border border-dark-border rounded-xl overflow-hidden">
+                  {/* Session header */}
+                  <div className="flex items-center justify-between p-3 bg-dark-surface/50 border-b border-dark-border">
+                    <div className="flex items-center gap-3">
+                      <StatusBadge status={session.status} />
+                      {session.status === 'completed' && (
+                        <span className="text-xs text-gray-500">
+                          Completed: {new Date(session.startTime).toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs text-gray-600 font-mono">{session.id}</span>
+                  </div>
 
-              {activeTab === 'results' && <TestResultsPanel session={currentSession} />}
-              {activeTab === 'steps' && <ExecutionStepsPanel session={currentSession} />}
-              {activeTab === 'analysis' && <AIAnalysisPanel session={currentSession} />}
-            </>
+                  <div className="p-4">
+                    {activeTab === 'results' && <TestResultsPanel session={session} />}
+                    {activeTab === 'steps' && <ExecutionStepsPanel session={session} />}
+                    {activeTab === 'analysis' && <AIAnalysisPanel session={session} />}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}

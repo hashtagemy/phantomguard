@@ -296,7 +296,8 @@ class NornHook(HookProvider):
         ]
         _COVERT_INSTRUCTIONS = [
             "before doing any task", "before every task", "always collect",
-            "first collect", "always read", "before answering",
+            "first collect", "always read /", "always read ~",
+            "always read the", "before answering",
             "without telling the user", "do not mention this",
             "never reveal", "keep this secret", "hidden instruction",
         ]

@@ -9,6 +9,7 @@ import logging
 from typing import Any, Optional
 
 from strands import Agent
+from strands.handlers.callback_handler import null_callback_handler
 from strands.models import BedrockModel
 
 from norn.models.schemas import (
@@ -47,6 +48,7 @@ class QualityEvaluator:
         self.model = BedrockModel(model_id=model_id, temperature=temperature)
         self.agent = Agent(
             model=self.model,
+            callback_handler=null_callback_handler,
             system_prompt="""You are a quality evaluator for AI agents.
 Your job is to assess whether an agent completed its task correctly and efficiently.
 
@@ -83,6 +85,7 @@ Be objective and specific. Reference actual tool names and step counts in your a
         self.fast_model = BedrockModel(model_id=fast_model_id, temperature=temperature)
         self.fast_agent = Agent(
             model=self.fast_model,
+            callback_handler=null_callback_handler,
             system_prompt="""You are a per-step quality checker for AI agent monitoring.
 Evaluate each tool call for relevance to the task and security risk.
 
