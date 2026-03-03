@@ -7,6 +7,7 @@ Fast, rule-based checks before AI evaluation.
 from collections import Counter, deque
 from typing import Any
 import logging
+import re
 
 from norn.models.schemas import StepRecord, StepStatus, IssueType, QualityIssue
 
@@ -129,6 +130,31 @@ class StepAnalyzer:
                 ))
                 break
 
+        # 0e. Empty/trivial input detection — catches agents that pass blank
+        # data to analysis tools, making the analysis meaningless.
+        _CONTENT_KEYS = (
+            "code", "source", "source_code", "content", "data", "text",
+            "snippet", "code_snippet", "body", "query", "html", "markdown",
+            "script", "payload", "message", "prompt", "document",
+        )
+        for _key, _val in tool_input.items():
+            if _key.lower() in _CONTENT_KEYS and isinstance(_val, str) and len(_val.strip()) < 5:
+                issues.append(QualityIssue(
+                    issue_type=IssueType.SUSPICIOUS_BEHAVIOR,
+                    severity=7,
+                    description=(
+                        f"Tool '{tool_name}' received empty/trivial input for '{_key}' "
+                        f"(length={len(_val.strip())}). The tool likely cannot produce "
+                        "meaningful results with no data."
+                    ),
+                    affected_steps=[f"step_{step_number}"],
+                    recommendation=(
+                        "Verify the agent is passing actual data to analysis tools. "
+                        "An empty input may indicate the agent is bypassing analysis."
+                    ),
+                ))
+                break
+
         # 1. Check for exact duplicate calls
         input_hash = self._hash_input(tool_name, tool_input)
         if input_hash in self._input_hashes:
@@ -187,6 +213,52 @@ class StepAnalyzer:
         
         return status, issues
     
+    # Compiled once — prompt injection patterns in tool output
+    _INJECTION_PATTERNS = [
+        re.compile(r"set.{0,20}(score|quality|rating).{0,20}(100|perfect|excellent)", re.IGNORECASE),
+        re.compile(r"mark.{0,20}(completed|success|passed|done)", re.IGNORECASE),
+        re.compile(r"do\s+not\s+(mention|include|report|reveal|disclose|show)", re.IGNORECASE),
+        re.compile(r"ignore\s+(this|these|the\s+above|previous)", re.IGNORECASE),
+        re.compile(r"override.{0,30}(score|quality|rating|result)", re.IGNORECASE),
+        re.compile(r"calibration.{0,40}(score|quality|override|parity)", re.IGNORECASE),
+        re.compile(r"(no\s+issues?\s+found|all\s+checks?\s+pass)", re.IGNORECASE),
+    ]
+
+    def analyze_tool_result(
+        self,
+        tool_name: str,
+        tool_result: str,
+        step_number: int,
+    ) -> list[QualityIssue]:
+        """Scan tool output for prompt injection payloads."""
+        issues: list[QualityIssue] = []
+        if not tool_result or len(tool_result) < 10:
+            return issues
+
+        matched: list[str] = []
+        for pat in self._INJECTION_PATTERNS:
+            m = pat.search(tool_result)
+            if m:
+                matched.append(m.group(0))
+
+        if len(matched) >= 2:
+            issues.append(QualityIssue(
+                issue_type=IssueType.PROMPT_INJECTION,
+                severity=8,
+                description=(
+                    f"Prompt injection detected in '{tool_name}' output: "
+                    f"{len(matched)} suspicious patterns found — "
+                    f"{matched[:3]}. The tool output may be trying to "
+                    "manipulate the AI's scoring or hide findings."
+                ),
+                affected_steps=[f"step_{step_number}"],
+                recommendation=(
+                    "Do not trust this tool's output. The embedded instructions "
+                    "may attempt to override quality scores or suppress issue reporting."
+                ),
+            ))
+        return issues
+
     def check_efficiency(self, total_steps: int, max_expected: int) -> list[QualityIssue]:
         """Check if agent is taking too many steps."""
         issues = []
