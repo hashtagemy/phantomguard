@@ -294,9 +294,32 @@ async def complete_session(session_id: str, data: Dict[str, Any]) -> Dict[str, A
             session = json.load(f)
 
         existing_steps = session.get("steps", [])
+        incoming_steps = data.pop("steps", None)
         session.update(data)
 
-        if not data.get("steps"):
+        if incoming_steps:
+            # Merge incoming steps with existing: non-null incoming values
+            # overwrite existing values (e.g. AI eval scores replacing nulls).
+            existing_by_id: Dict[str, int] = {}
+            for idx, s in enumerate(existing_steps):
+                sid = s.get("step_id")
+                if sid:
+                    existing_by_id[sid] = idx
+
+            merged = [dict(s) for s in existing_steps]
+            for s in incoming_steps:
+                sid = s.get("step_id")
+                if sid and sid in existing_by_id:
+                    tgt = merged[existing_by_id[sid]]
+                    for k, v in s.items():
+                        if v is not None and v != "" and v != []:
+                            tgt[k] = v
+                elif sid:
+                    merged.append(s)
+
+            session["steps"] = merged
+            session["total_steps"] = len(merged)
+        else:
             session["steps"] = existing_steps
             session["total_steps"] = len(existing_steps)
 

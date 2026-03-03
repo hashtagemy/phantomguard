@@ -149,15 +149,25 @@ def get_swarm_analysis(swarm_id: str) -> dict:
     Reads all agent sessions (tasks, evaluations, handoffs, steps) and asks
     Nova Lite to assess inter-agent coherence.  Results are cached in memory.
     """
-    if swarm_id in _analysis_cache:
-        return _analysis_cache[swarm_id]
-
     all_sessions = _load_all_sessions()
     members = [s for s in all_sessions if s.get("swarm_id") == swarm_id]
     if not members:
         raise HTTPException(status_code=404, detail="Swarm not found")
 
     sorted_members = sorted(members, key=lambda s: s.get("swarm_order") or 0)
+
+    # Only use cache when ALL agents have completed — otherwise
+    # early requests would cache incomplete results (e.g. only the first agent).
+    all_completed = all(
+        s.get("status") == "completed" and s.get("overall_quality") not in (None, "PENDING")
+        for s in sorted_members
+    )
+
+    if all_completed and swarm_id in _analysis_cache:
+        cached = _analysis_cache[swarm_id]
+        # Invalidate if agent count changed (new agent joined the swarm)
+        if cached.get("_agent_count") == len(sorted_members):
+            return cached
     dialogue = _build_swarm_dialogue(sorted_members)
 
     agent_names = [
@@ -224,7 +234,10 @@ For each agent_assessment "note": describe what the agent did and how well it bu
             "recommendations": result.get("recommendations", []),
         }
 
-        _analysis_cache[swarm_id] = payload
+        # Only cache when all agents have completed — avoids stale partial results
+        if all_completed:
+            payload["_agent_count"] = len(sorted_members)
+            _analysis_cache[swarm_id] = payload
         return payload
 
     except Exception as e:

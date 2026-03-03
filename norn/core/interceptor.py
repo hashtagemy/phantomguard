@@ -168,6 +168,7 @@ class NornHook(HookProvider):
         self._loop_detected: bool = False
         self._pending_tasks: list[asyncio.Task] = []  # Kept for compatibility, no longer used
         self._steps_to_evaluate: list[tuple] = []  # (StepRecord, full_result) — evaluated in bg loop
+        self._eval_complete: bool = False  # True after AI eval finishes — gates dashboard writes
 
         # Lazy-loaded components
         self._evaluator = None
@@ -800,8 +801,9 @@ class NornHook(HookProvider):
             self._session_report.ai_evaluation = f"Evaluation error: {str(e)}"
         
         finally:
+            self._eval_complete = True
             self._finalize_report()
-    
+
     def _finalize_report(self) -> None:
         """Save final report to audit log."""
         if not self._session_report:
@@ -874,8 +876,13 @@ class NornHook(HookProvider):
         # Write to audit log
         self.audit.record_session(self._session_report)
 
-        # Dashboard integration — send final state
-        if self._norn_url and self._registered_agent_id:
+        # Dashboard integration — send final state.
+        # Only send when AI eval is complete (or disabled) to avoid a race
+        # condition: the first (heuristic) _finalize_report() would send null
+        # step scores to the API, which then writes them back to the JSON file,
+        # potentially overwriting the actual scores written by the post-eval call.
+        eval_ready = self._eval_complete or not self.enable_ai_eval
+        if self._norn_url and self._registered_agent_id and eval_ready:
             self._dashboard_complete_session()
 
         logger.info(
@@ -993,12 +1000,33 @@ class NornHook(HookProvider):
             for i in report.issues
         ]
         total_steps = self._existing_step_count + (report.total_steps or 0)
+
+        # Include step-level data with AI eval scores so the API
+        # persists the per-step relevance/security scores alongside
+        # the session-level fields.
+        steps_payload = [
+            {
+                "step_id": step.step_id,
+                "step_number": step.step_number,
+                "timestamp": step.timestamp.isoformat(),
+                "tool_name": step.tool_name,
+                "tool_input": str(step.tool_input),
+                "tool_result": str(step.tool_result),
+                "status": step.status.value,
+                "relevance_score": step.relevance_score,
+                "security_score": step.security_score,
+                "reasoning": step.reasoning or "",
+            }
+            for step in report.steps
+        ]
+
         self._post_to_dashboard(
             f"/api/sessions/{report.session_id}/complete",
             {
                 "ended_at": report.ended_at.isoformat() if report.ended_at else datetime.now(timezone.utc).isoformat(),
                 "status": "completed",
                 "total_steps": total_steps,
+                "steps": steps_payload,
                 "overall_quality": report.overall_quality.value,
                 "efficiency_score": report.efficiency_score,
                 "security_score": report.security_score,
