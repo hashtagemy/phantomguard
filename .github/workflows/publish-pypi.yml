@@ -14,6 +14,7 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment: pypi
 
     steps:
       - name: Checkout code
@@ -27,7 +28,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install build tools
-        run: pip install build twine
+        run: pip install build
 
       - name: Extract version from pyproject.toml
         id: version
@@ -54,10 +55,7 @@ jobs:
 
       - name: Publish to PyPI
         if: steps.check.outputs.exists == 'false'
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: twine upload dist/*
+        uses: pypa/gh-action-pypi-publish@release/v1
 
       - name: Create git tag
         if: steps.check.outputs.exists == 'false'
