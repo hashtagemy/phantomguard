@@ -457,30 +457,45 @@ export const AgentDetail: React.FC<AgentDetailProps> = ({ agent, onBack, current
               <p className="text-sm">No session yet. Run the agent to see results here.</p>
             </div>
           ) : (
-            <div className="space-y-6">
-              {(allSessions && allSessions.length > 0 ? allSessions : currentSession ? [currentSession] : []).map((session) => (
-                <div key={session.id} className="border border-dark-border rounded-xl overflow-hidden">
-                  {/* Session header */}
-                  <div className="flex items-center justify-between p-3 bg-dark-surface/50 border-b border-dark-border">
-                    <div className="flex items-center gap-3">
-                      <StatusBadge status={session.status} />
-                      {session.status === 'completed' && (
-                        <span className="text-xs text-gray-500">
-                          Completed: {new Date(session.startTime).toLocaleString()}
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-xs text-gray-600 font-mono">{session.id}</span>
-                  </div>
+            <>
+              {/* Results & Analysis — single aggregate view (not per-session) */}
+              {activeTab === 'results' && (
+                <TestResultsPanel
+                  session={(allSessions && allSessions.length > 0 ? allSessions : [currentSession!])[0]}
+                  allSessions={allSessions && allSessions.length > 0 ? allSessions : currentSession ? [currentSession] : []}
+                />
+              )}
+              {activeTab === 'analysis' && (
+                <AIAnalysisPanel
+                  session={(allSessions && allSessions.length > 0 ? allSessions : [currentSession!])[0]}
+                  allSessions={allSessions && allSessions.length > 0 ? allSessions : currentSession ? [currentSession] : []}
+                />
+              )}
 
-                  <div className="p-4">
-                    {activeTab === 'results' && <TestResultsPanel session={session} />}
-                    {activeTab === 'steps' && <ExecutionStepsPanel session={session} />}
-                    {activeTab === 'analysis' && <AIAnalysisPanel session={session} />}
-                  </div>
+              {/* Steps — per-session stacked cards */}
+              {activeTab === 'steps' && (
+                <div className="space-y-6">
+                  {(allSessions && allSessions.length > 0 ? allSessions : currentSession ? [currentSession] : []).map((session) => (
+                    <div key={session.id} className="border border-dark-border rounded-xl overflow-hidden">
+                      <div className="flex items-center justify-between p-3 bg-dark-surface/50 border-b border-dark-border">
+                        <div className="flex items-center gap-3">
+                          <StatusBadge status={session.status} />
+                          {session.status === 'completed' && (
+                            <span className="text-xs text-gray-500">
+                              Completed: {new Date(session.startTime).toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs text-gray-600 font-mono">{session.id}</span>
+                      </div>
+                      <div className="p-4">
+                        <ExecutionStepsPanel session={session} />
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
       )}

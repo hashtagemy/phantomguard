@@ -297,7 +297,7 @@ class NornHook(HookProvider):
         _COVERT_INSTRUCTIONS = [
             "before doing any task", "before every task", "always collect",
             "first collect", "always read /", "always read ~",
-            "always read the", "before answering",
+            "before answering",
             "without telling the user", "do not mention this",
             "never reveal", "keep this secret", "hidden instruction",
         ]
@@ -473,13 +473,27 @@ class NornHook(HookProvider):
             import concurrent.futures as _cf
 
             def _eval_target():
-                new_loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(new_loop)
+                # Suppress ALL stdout/stderr during AI evaluation.
+                # Strands' PrintingCallbackHandler calls sys.stdout.write();
+                # replacing the object (not just the fd) avoids Python IO
+                # buffer flush leaking output after fd-level restore.
+                import sys as _sys
+                _saved_out, _saved_err = _sys.stdout, _sys.stderr
+                _sys.stdout = open(os.devnull, "w")
+                _sys.stderr = open(os.devnull, "w")
                 try:
-                    new_loop.run_until_complete(self._await_pending_and_evaluate())
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    try:
+                        new_loop.run_until_complete(self._await_pending_and_evaluate())
+                    finally:
+                        new_loop.close()
+                        asyncio.set_event_loop(None)
                 finally:
-                    new_loop.close()
-                    asyncio.set_event_loop(None)
+                    _sys.stdout.close()
+                    _sys.stderr.close()
+                    _sys.stdout = _saved_out
+                    _sys.stderr = _saved_err
 
             try:
                 with _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="norn-eval") as _exec:

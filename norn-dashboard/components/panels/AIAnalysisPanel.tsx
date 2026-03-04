@@ -1,16 +1,22 @@
 import React from 'react';
 import { Session } from '../../types';
-import { Cpu, Microscope, Lightbulb, AlertCircle, AlertTriangle, Info, XCircle, Wrench, Brain, Zap } from 'lucide-react';
+import { Cpu, Microscope, Lightbulb, AlertCircle, AlertTriangle, Info, XCircle, Wrench, Brain, Zap, Clock } from 'lucide-react';
 
 interface AIAnalysisPanelProps {
   session: Session;
+  allSessions?: Session[];
 }
 
-export const AIAnalysisPanel: React.FC<AIAnalysisPanelProps> = ({ session }) => {
+export const AIAnalysisPanel: React.FC<AIAnalysisPanelProps> = ({ session, allSessions }) => {
   const isTerminated = session.status === 'terminated';
   const isActive = session.status === 'active';
   const hasAiEval = !!(session.detailedAnalysis || session.aiEvaluation);
   const hasIssues = session.issueDetails && session.issueDetails.length > 0;
+
+  // Find previous sessions with AI eval (for history section)
+  const previousSessions = allSessions && allSessions.length > 1
+    ? allSessions.slice(1).filter(s => s.detailedAnalysis || s.aiEvaluation)
+    : [];
 
   const renderAnalysisContent = () => {
     if (hasAiEval) {
@@ -46,19 +52,23 @@ export const AIAnalysisPanel: React.FC<AIAnalysisPanelProps> = ({ session }) => 
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      {/* Latest Session Analysis */}
       <div className="bg-gradient-to-b from-norn-900/20 to-dark-surface rounded-lg border border-norn-900/30 overflow-hidden">
         <div className="p-3 border-b border-norn-900/30 bg-norn-900/10 flex items-center justify-between">
           <h3 className="text-xs font-semibold text-norn-300 flex items-center gap-2">
             <Cpu size={13} /> Amazon Nova AI Evaluation
           </h3>
-          <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border ${
-            isTerminated && !hasAiEval
-              ? 'text-red-400/70 border-red-500/20'
-              : 'text-norn-400/70 border-norn-500/20'
-          }`}>
-            {isTerminated && !hasAiEval ? 'Terminated' : 'AI Generated'}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-gray-600 font-mono">{session.id}</span>
+            <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border ${
+              isTerminated && !hasAiEval
+                ? 'text-red-400/70 border-red-500/20'
+                : 'text-norn-400/70 border-norn-500/20'
+            }`}>
+              {isTerminated && !hasAiEval ? 'Terminated' : 'AI Generated'}
+            </span>
+          </div>
         </div>
 
         <div className="p-4 space-y-4">
@@ -93,11 +103,8 @@ export const AIAnalysisPanel: React.FC<AIAnalysisPanelProps> = ({ session }) => 
                     <div>
                       <div className={`text-xs font-medium ${
                         issue.severity >= 8 ? 'text-red-300' :
-                        issue.severity >= 5 ? 'text-yellow-300' :
-                        'text-blue-300'
-                      }`}>
-                        {issue.issueType.replace(/_/g, ' ')}
-                      </div>
+                        issue.severity >= 5 ? 'text-yellow-300' : 'text-blue-300'
+                      }`}>{issue.issueType.replace(/_/g, ' ')}</div>
                       <div className="text-[10px] text-gray-400 mt-0.5">{issue.description}</div>
                       {issue.recommendation && (
                         <div className="text-[10px] text-gray-500 mt-0.5 italic">{issue.recommendation}</div>
@@ -186,6 +193,50 @@ export const AIAnalysisPanel: React.FC<AIAnalysisPanelProps> = ({ session }) => 
           )}
         </div>
       </div>
+
+      {/* Previous Sessions History */}
+      {previousSessions.length > 0 && (
+        <div className="bg-dark-surface/50 rounded-lg border border-dark-border overflow-hidden">
+          <div className="p-3 bg-dark-surface border-b border-dark-border">
+            <h3 className="text-xs font-semibold text-gray-200 flex items-center gap-2">
+              <Clock size={13} className="text-gray-400" />
+              Previous Sessions
+              <span className="text-[10px] text-gray-500 font-normal">({previousSessions.length})</span>
+            </h3>
+          </div>
+          <div className="p-3 space-y-2">
+            {previousSessions.map((s) => (
+              <div key={s.id} className="p-2.5 rounded-lg border border-dark-border/50 bg-dark-bg/30">
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                      s.overallQuality === 'EXCELLENT' ? 'bg-emerald-900/30 text-emerald-400' :
+                      s.overallQuality === 'GOOD' ? 'bg-blue-900/30 text-blue-400' :
+                      s.overallQuality === 'POOR' ? 'bg-yellow-900/30 text-yellow-400' :
+                      s.overallQuality === 'FAILED' ? 'bg-red-900/30 text-red-400' :
+                      'bg-gray-800 text-gray-400'
+                    }`}>{s.overallQuality}</span>
+                    {s.efficiencyScore != null && (
+                      <span className="text-[10px] text-gray-500">Eff: {s.efficiencyScore}%</span>
+                    )}
+                    {s.securityScore != null && (
+                      <span className="text-[10px] text-gray-500">Sec: {s.securityScore}%</span>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-gray-600">
+                    {new Date(s.startTime).toLocaleString()}
+                  </span>
+                </div>
+                {(s.detailedAnalysis || s.aiEvaluation) && (
+                  <p className="text-[10px] text-gray-500 leading-relaxed line-clamp-2">
+                    {s.detailedAnalysis || s.aiEvaluation}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
