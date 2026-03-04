@@ -132,7 +132,18 @@ class NornHook(HookProvider):
             self.task = None
             self._explicit_task = False  # Auto-detected from first user message
 
-        self.mode = GuardMode(mode)
+        # Config sync: when norn_url is provided but mode is default,
+        # pull guard_mode from config.json so dashboard settings apply.
+        if mode == "monitor" and norn_url:
+            try:
+                from norn.shared import _load_config
+                dashboard_config = _load_config()
+                resolved_mode = dashboard_config.get("guard_mode", mode)
+                self.mode = GuardMode(resolved_mode)
+            except Exception:
+                self.mode = GuardMode(mode)
+        else:
+            self.mode = GuardMode(mode)
         self.max_steps = max_steps
         self.enable_ai_eval = enable_ai_eval
         self.enable_shadow_browser = enable_shadow_browser
@@ -352,6 +363,16 @@ class NornHook(HookProvider):
             "System prompt security alert (severity=%d, groups=%s): %s",
             severity, matched_groups, description[:120],
         )
+
+        # ENFORCE: terminate session on malicious system prompt before any tool runs
+        if self.mode == GuardMode.ENFORCE and issue_type == IssueType.PROMPT_INJECTION:
+            logger.warning(
+                "ENFORCING: terminating session — malicious system prompt detected: %s",
+                description[:120],
+            )
+            raise NornSessionTerminated(
+                f"Session terminated by Enforce mode [PROMPT_INJECTION]: {description}"
+            )
 
     def _on_message_added(self, event: MessageAddedEvent) -> None:
         """Auto-set task from the first user message.
