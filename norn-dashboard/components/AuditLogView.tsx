@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Shield,
   Clock,
+  Trash2,
 } from 'lucide-react';
 
 const EVENT_CONFIG: Record<string, { icon: React.ElementType; label: string; color: string }> = {
@@ -45,6 +46,32 @@ export const AuditLogView: React.FC = () => {
       setError(err instanceof Error ? err.message : 'Failed to load audit logs');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteEvent = async (event: AuditLogEvent) => {
+    const isSessionEvent = event.event_type === 'session_start' || event.event_type === 'session_end';
+    const message = isSessionEvent
+      ? `Delete entire session "${event.session_id}" and all its events?`
+      : `Delete this ${event.event_type.replace(/_/g, ' ')} event?`;
+    if (!confirm(message)) return;
+    try {
+      await api.deleteAuditEvent(event.id, event.session_id, event.event_type);
+      await loadLogs();
+    } catch (err) {
+      console.error('Failed to delete audit event:', err);
+      alert('Failed to delete event');
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (!confirm(`Delete ALL ${events.length} audit log events? This will remove all session data and cannot be undone.`)) return;
+    try {
+      await api.deleteAllAuditLogs();
+      await loadLogs();
+    } catch (err) {
+      console.error('Failed to clear audit logs:', err);
+      alert('Failed to clear audit logs');
     }
   };
 
@@ -115,6 +142,14 @@ export const AuditLogView: React.FC = () => {
               <RefreshCw size={12} className={autoRefresh ? 'animate-spin' : ''} />
               {autoRefresh ? 'Live' : 'Paused'}
             </button>
+            {events.length > 0 && (
+              <button
+                onClick={handleClearAll}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-red-900/30 bg-red-950/20 text-red-400 hover:bg-red-900/30 hover:text-red-300 transition-colors"
+              >
+                <Trash2 size={12} /> Clear All
+              </button>
+            )}
             <button
               onClick={loadLogs}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-dark-border bg-dark-surface text-gray-400 hover:text-gray-300 transition-colors"
@@ -194,12 +229,13 @@ export const AuditLogView: React.FC = () => {
       {/* Event List */}
       <div className="flex-1 min-h-0 bg-dark-surface/30 border border-dark-border rounded-xl overflow-hidden flex flex-col">
         {/* Table Header */}
-        <div className="flex-none grid grid-cols-[140px_100px_1fr_80px_80px] gap-3 px-4 py-2 bg-dark-surface border-b border-dark-border text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+        <div className="flex-none grid grid-cols-[140px_100px_1fr_80px_80px_36px] gap-3 px-4 py-2 bg-dark-surface border-b border-dark-border text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
           <span>Timestamp</span>
           <span>Type</span>
           <span>Event</span>
           <span>Agent</span>
           <span>Severity</span>
+          <span></span>
         </div>
 
         {/* Rows */}
@@ -217,8 +253,8 @@ export const AuditLogView: React.FC = () => {
                 <div key={event.id}>
                   <div
                     onClick={() => event.detail ? setExpandedId(isExpanded ? null : event.id) : undefined}
-                    className={`grid grid-cols-[140px_100px_1fr_80px_80px] gap-3 px-4 py-2.5 border-b border-dark-border/50 text-sm transition-colors ${
-                      event.detail ? 'cursor-pointer hover:bg-dark-surface/50' : ''
+                    className={`group grid grid-cols-[140px_100px_1fr_80px_80px_36px] gap-3 px-4 py-2.5 border-b border-dark-border/50 text-sm transition-colors ${
+                      event.detail ? 'cursor-pointer hover:bg-dark-surface/50' : 'hover:bg-dark-surface/30'
                     } ${isExpanded ? 'bg-dark-surface/40' : ''}`}
                   >
                     {/* Timestamp */}
@@ -246,6 +282,15 @@ export const AuditLogView: React.FC = () => {
                       <span className={`w-1.5 h-1.5 rounded-full ${sevStyle.dot}`}></span>
                       {event.severity}
                     </span>
+
+                    {/* Delete */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteEvent(event); }}
+                      title={event.event_type === 'session_start' || event.event_type === 'session_end' ? 'Delete session' : 'Delete event'}
+                      className="p-1 text-gray-600 hover:text-red-400 hover:bg-red-900/20 rounded transition-colors opacity-0 group-hover:opacity-100"
+                    >
+                      <Trash2 size={13} />
+                    </button>
                   </div>
 
                   {/* Expanded Detail */}

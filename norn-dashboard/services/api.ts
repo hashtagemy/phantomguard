@@ -317,6 +317,21 @@ class ApiClient {
     return this.request<AuditLogEvent[]>(`/api/audit-logs?limit=${limit}`);
   }
 
+  async deleteAuditEvent(
+    eventId: string,
+    sessionId: string,
+    eventType: string
+  ): Promise<{ status: string; event_id: string; action: string }> {
+    return this.request(
+      `/api/audit-logs/${encodeURIComponent(eventId)}?session_id=${encodeURIComponent(sessionId)}&event_type=${encodeURIComponent(eventType)}`,
+      { method: 'DELETE' }
+    );
+  }
+
+  async deleteAllAuditLogs(): Promise<{ status: string; deleted: number }> {
+    return this.request('/api/audit-logs', { method: 'DELETE' });
+  }
+
   // Config
   async getConfig(): Promise<Record<string, any>> {
     return this.request<Record<string, any>>('/api/config');

@@ -6,9 +6,9 @@ import json
 import logging
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
-from norn.shared import SESSIONS_DIR, verify_api_key
+from norn.shared import SESSIONS_DIR, _atomic_write_json, verify_api_key
 
 router = APIRouter()
 logger = logging.getLogger("norn.api")
@@ -113,3 +113,75 @@ def get_audit_logs(limit: int = 200) -> List[Dict[str, Any]]:
     # Sort all events by timestamp descending
     events.sort(key=lambda e: e.get("timestamp", ""), reverse=True)
     return events[:limit]
+
+
+@router.delete("/api/audit-logs/{event_id}", dependencies=[Depends(verify_api_key)])
+def delete_audit_event(
+    event_id: str,
+    session_id: str,
+    event_type: str,
+) -> Dict[str, Any]:
+    """Delete a single audit log event by mapping it to the underlying session data."""
+    session_file = SESSIONS_DIR / f"{session_id}.json"
+    if not session_file.exists():
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Session-level events: delete the whole file
+    if event_type in ("session_start", "session_end"):
+        try:
+            session_file.unlink()
+            return {"status": "deleted", "event_id": event_id, "action": "session_deleted"}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # Step-level event: remove step from session
+    if event_type == "tool_call":
+        try:
+            with open(session_file) as f:
+                session = json.load(f)
+            steps = session.get("steps", [])
+            new_steps = [s for s in steps if s.get("step_id") != event_id]
+            if len(new_steps) == len(steps):
+                raise HTTPException(status_code=404, detail="Step not found")
+            session["steps"] = new_steps
+            session["total_steps"] = len(new_steps)
+            _atomic_write_json(session_file, session)
+            return {"status": "deleted", "event_id": event_id, "action": "step_deleted"}
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # Issue-level event: remove issue from session
+    if event_type == "issue":
+        try:
+            with open(session_file) as f:
+                session = json.load(f)
+            issues = session.get("issues", [])
+            new_issues = [i for i in issues if not (isinstance(i, dict) and i.get("issue_id") == event_id)]
+            if len(new_issues) == len(issues):
+                raise HTTPException(status_code=404, detail="Issue not found")
+            session["issues"] = new_issues
+            _atomic_write_json(session_file, session)
+            return {"status": "deleted", "event_id": event_id, "action": "issue_deleted"}
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    raise HTTPException(status_code=400, detail=f"Unknown event_type: {event_type}")
+
+
+@router.delete("/api/audit-logs", dependencies=[Depends(verify_api_key)])
+def delete_all_audit_logs() -> Dict[str, Any]:
+    """Delete ALL session files, effectively clearing all audit logs."""
+    if not SESSIONS_DIR.exists():
+        return {"status": "ok", "deleted": 0}
+    deleted = 0
+    for f in SESSIONS_DIR.glob("*.json"):
+        try:
+            f.unlink()
+            deleted += 1
+        except OSError as e:
+            logger.warning(f"Failed to delete {f}: {e}")
+    return {"status": "ok", "deleted": deleted}
