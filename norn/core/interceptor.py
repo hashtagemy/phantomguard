@@ -264,14 +264,15 @@ class NornHook(HookProvider):
 
         logger.info(f"Session started: {self._agent_name}")
 
-        # System prompt security analysis
+        # Dashboard entegrasyonu — register BEFORE system prompt check
+        # so enforce termination still appears on dashboard.
+        if self._norn_url:
+            self._dashboard_on_session_start()
+
+        # System prompt security analysis (enforce may raise here)
         system_prompt = getattr(event.agent, "system_prompt", None)
         if system_prompt:
             self._check_system_prompt(system_prompt)
-
-        # Dashboard entegrasyonu
-        if self._norn_url:
-            self._dashboard_on_session_start()
 
     # ── System Prompt Analysis ─────────────────────────────
 
@@ -370,6 +371,16 @@ class NornHook(HookProvider):
                 "ENFORCING: terminating session — malicious system prompt detected: %s",
                 description[:120],
             )
+            # Finalize and push to dashboard before raising
+            if self._session_report:
+                self._session_report.ended_at = datetime.now(timezone.utc)
+                self._session_report.overall_quality = SessionQuality.FAILED
+                self._session_report.security_score = 0
+                self._session_report.security_breach_detected = True
+                self._session_report.issues = list(self._issues)
+                self.audit.record_session(self._session_report)
+                if self._norn_url and self._registered_agent_id:
+                    self._dashboard_complete_session()
             raise NornSessionTerminated(
                 f"Session terminated by Enforce mode [PROMPT_INJECTION]: {description}"
             )
@@ -1060,7 +1071,7 @@ class NornHook(HookProvider):
             f"/api/sessions/{report.session_id}/complete",
             {
                 "ended_at": report.ended_at.isoformat() if report.ended_at else datetime.now(timezone.utc).isoformat(),
-                "status": "completed",
+                "status": "terminated" if report.security_breach_detected and report.overall_quality == SessionQuality.FAILED else "completed",
                 "total_steps": total_steps,
                 "steps": steps_payload,
                 "overall_quality": report.overall_quality.value,
