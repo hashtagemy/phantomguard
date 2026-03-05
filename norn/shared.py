@@ -130,6 +130,7 @@ DEFAULT_CONFIG = {
     "relevance_score_threshold": 30,
     "auto_intervene_on_loop": False,
     "log_retention_days": 30,
+    "audit_max_sessions": 100,
 }
 
 

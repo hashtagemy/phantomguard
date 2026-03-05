@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api, AuditLogEvent } from '../services/api';
 import {
   FileText,
@@ -13,6 +13,7 @@ import {
   Shield,
   Clock,
   Trash2,
+  X,
 } from 'lucide-react';
 
 const EVENT_CONFIG: Record<string, { icon: React.ElementType; label: string; color: string }> = {
@@ -34,20 +35,28 @@ export const AuditLogView: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<string>('all');
   const [filterSeverity, setFilterSeverity] = useState<string>('all');
+  const [filterAgent, setFilterAgent] = useState<string>('all');
+  const [filterSession, setFilterSession] = useState<string>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const prevDataRef = useRef<string>('');
 
-  const loadLogs = async () => {
+  const loadLogs = useCallback(async () => {
     try {
       const data = await api.getAuditLogs();
-      setEvents(data);
+      const serialized = JSON.stringify(data);
+      // Skip re-render if data unchanged (preserves scroll, expanded state)
+      if (serialized !== prevDataRef.current) {
+        prevDataRef.current = serialized;
+        setEvents(data);
+      }
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load audit logs');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const handleDeleteEvent = async (event: AuditLogEvent) => {
     const isSessionEvent = event.event_type === 'session_start' || event.event_type === 'session_end';
@@ -57,6 +66,7 @@ export const AuditLogView: React.FC = () => {
     if (!confirm(message)) return;
     try {
       await api.deleteAuditEvent(event.id, event.session_id, event.event_type);
+      prevDataRef.current = '';
       await loadLogs();
     } catch (err) {
       console.error('Failed to delete audit event:', err);
@@ -68,6 +78,7 @@ export const AuditLogView: React.FC = () => {
     if (!confirm(`Delete ALL ${events.length} audit log events? This will remove all session data and cannot be undone.`)) return;
     try {
       await api.deleteAllAuditLogs();
+      prevDataRef.current = '';
       await loadLogs();
     } catch (err) {
       console.error('Failed to clear audit logs:', err);
@@ -75,16 +86,25 @@ export const AuditLogView: React.FC = () => {
     }
   };
 
+  const clearAllFilters = () => {
+    setFilterType('all');
+    setFilterSeverity('all');
+    setFilterAgent('all');
+    setFilterSession('all');
+  };
+
   useEffect(() => {
     loadLogs();
     if (!autoRefresh) return;
-    const interval = setInterval(loadLogs, 5000);
+    const interval = setInterval(loadLogs, 10000);
     return () => clearInterval(interval);
-  }, [autoRefresh]);
+  }, [autoRefresh, loadLogs]);
 
   const filtered = events.filter(e => {
     if (filterType !== 'all' && e.event_type !== filterType) return false;
     if (filterSeverity !== 'all' && e.severity !== filterSeverity) return false;
+    if (filterAgent !== 'all' && e.agent_name !== filterAgent) return false;
+    if (filterSession !== 'all' && e.session_id !== filterSession) return false;
     return true;
   });
 
@@ -97,6 +117,11 @@ export const AuditLogView: React.FC = () => {
     critical: events.filter(e => e.severity === 'critical').length,
     warning: events.filter(e => e.severity === 'warning').length,
   };
+
+  const uniqueAgents = Array.from(new Set<string>(events.map(e => e.agent_name))).sort();
+  const uniqueSessions = Array.from(new Set<string>(events.map(e => e.session_id))).sort();
+
+  const hasActiveFilters = filterType !== 'all' || filterSeverity !== 'all' || filterAgent !== 'all' || filterSession !== 'all';
 
   if (loading && events.length === 0) {
     return (
@@ -118,6 +143,8 @@ export const AuditLogView: React.FC = () => {
       </div>
     );
   }
+
+  const GRID = 'grid-cols-[130px_90px_1fr_110px_90px_70px_36px]';
 
   return (
     <div className="flex flex-col h-full space-y-4 animate-in fade-in duration-700">
@@ -151,7 +178,7 @@ export const AuditLogView: React.FC = () => {
               </button>
             )}
             <button
-              onClick={loadLogs}
+              onClick={() => { prevDataRef.current = ''; loadLogs(); }}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-dark-border bg-dark-surface text-gray-400 hover:text-gray-300 transition-colors"
             >
               <RefreshCw size={12} /> Refresh
@@ -193,7 +220,7 @@ export const AuditLogView: React.FC = () => {
       </div>
 
       {/* Filters */}
-      <div className="flex-none flex items-center gap-3">
+      <div className="flex-none flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-1 text-xs text-gray-500">
           <Filter size={12} /> Filter:
         </div>
@@ -223,17 +250,52 @@ export const AuditLogView: React.FC = () => {
             </button>
           ))}
         </div>
-        <span className="text-xs text-gray-500 ml-auto">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
+        {uniqueAgents.length > 1 && (
+          <select
+            value={filterAgent}
+            onChange={(e) => setFilterAgent(e.target.value)}
+            className="px-2.5 py-1.5 text-[11px] font-medium rounded-lg bg-dark-surface/50 border border-dark-border text-gray-300 focus:outline-none focus:border-norn-500"
+          >
+            <option value="all">All Agents</option>
+            {uniqueAgents.map(agent => (
+              <option key={agent} value={agent}>{agent}</option>
+            ))}
+          </select>
+        )}
+        {uniqueSessions.length > 1 && (
+          <select
+            value={filterSession}
+            onChange={(e) => setFilterSession(e.target.value)}
+            className="px-2.5 py-1.5 text-[11px] font-medium rounded-lg bg-dark-surface/50 border border-dark-border text-gray-300 focus:outline-none focus:border-norn-500"
+          >
+            <option value="all">All Sessions</option>
+            {uniqueSessions.map(sid => (
+              <option key={sid} value={sid}>{sid.substring(0, 20)}...</option>
+            ))}
+          </select>
+        )}
+        <div className="flex items-center gap-2 ml-auto">
+          {hasActiveFilters && (
+            <button
+              onClick={clearAllFilters}
+              className="flex items-center gap-1 text-xs text-norn-400 hover:text-norn-300 transition-colors"
+            >
+              <X size={12} /> Clear filters
+            </button>
+          )}
+          <span className="text-xs text-gray-500">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
+        </div>
       </div>
 
       {/* Event List */}
       <div className="flex-1 min-h-0 bg-dark-surface/30 border border-dark-border rounded-xl overflow-hidden flex flex-col">
         {/* Table Header */}
-        <div className="flex-none grid grid-cols-[140px_100px_1fr_80px_80px_36px] gap-3 px-4 py-2 bg-dark-surface border-b border-dark-border text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+        <div className={`flex-none grid ${GRID} gap-3 px-4 py-2 bg-dark-surface border-b border-dark-border text-[11px] font-semibold text-gray-500 uppercase tracking-wider`}>
           <span>Timestamp</span>
           <span>Type</span>
           <span>Event</span>
           <span>Agent</span>
+          <span>Model</span>
           <span>Severity</span>
           <span></span>
         </div>
@@ -253,7 +315,7 @@ export const AuditLogView: React.FC = () => {
                 <div key={event.id}>
                   <div
                     onClick={() => event.detail ? setExpandedId(isExpanded ? null : event.id) : undefined}
-                    className={`group grid grid-cols-[140px_100px_1fr_80px_80px_36px] gap-3 px-4 py-2.5 border-b border-dark-border/50 text-sm transition-colors ${
+                    className={`group grid ${GRID} gap-3 px-4 py-2.5 border-b border-dark-border/50 text-sm transition-colors ${
                       event.detail ? 'cursor-pointer hover:bg-dark-surface/50' : 'hover:bg-dark-surface/30'
                     } ${isExpanded ? 'bg-dark-surface/40' : ''}`}
                   >
@@ -275,7 +337,12 @@ export const AuditLogView: React.FC = () => {
                     </span>
 
                     {/* Agent */}
-                    <span className="text-xs text-gray-500 truncate">{event.agent_name}</span>
+                    <span className="text-xs text-gray-400 truncate" title={event.agent_name}>{event.agent_name}</span>
+
+                    {/* Model */}
+                    <span className="text-xs text-gray-600 truncate font-mono" title={event.model || 'N/A'}>
+                      {event.model || '\u2014'}
+                    </span>
 
                     {/* Severity */}
                     <span className={`flex items-center gap-1.5 text-[11px] font-medium ${sevStyle.text}`}>
@@ -296,10 +363,18 @@ export const AuditLogView: React.FC = () => {
                   {/* Expanded Detail */}
                   {isExpanded && event.detail && (
                     <div className="px-4 py-3 bg-dark-bg/50 border-b border-dark-border/50">
-                      <div className="ml-[140px] pl-3 border-l-2 border-norn-900/30">
+                      <div className="ml-[130px] pl-3 border-l-2 border-norn-900/30">
                         <div className="text-xs text-gray-500 uppercase tracking-wider mb-1 font-semibold">Detail</div>
                         <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap">{event.detail}</p>
-                        <div className="mt-2 text-[10px] text-gray-600 font-mono">Session: {event.session_id}</div>
+                        <div className="mt-2 flex items-center gap-3 text-[10px] text-gray-600 font-mono">
+                          <span>Session: {event.session_id}</span>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setFilterSession(event.session_id); }}
+                            className="text-norn-500 hover:text-norn-400 underline"
+                          >
+                            Filter to this session
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}

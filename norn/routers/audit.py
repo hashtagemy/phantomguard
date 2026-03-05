@@ -4,21 +4,32 @@ norn/routers/audit.py — Audit log endpoint.
 
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from norn.shared import SESSIONS_DIR, _atomic_write_json, verify_api_key
+from norn.shared import SESSIONS_DIR, _atomic_write_json, _load_config, verify_api_key
 
 router = APIRouter()
 logger = logging.getLogger("norn.api")
 
 
 @router.get("/api/audit-logs", dependencies=[Depends(verify_api_key)])
-def get_audit_logs(limit: int = 200) -> List[Dict[str, Any]]:
+def get_audit_logs(
+    limit: int = 200,
+    max_sessions: int | None = None,
+    agent_name: str | None = None,
+    session_id: str | None = None,
+    event_type: str | None = None,
+    severity_filter: str | None = None,
+) -> List[Dict[str, Any]]:
     """Get chronological audit log events extracted from all sessions"""
     if not SESSIONS_DIR.exists():
         return []
+
+    config = _load_config()
+    effective_max = max_sessions or config.get("audit_max_sessions", 100)
 
     events: List[Dict[str, Any]] = []
     session_files = sorted(
@@ -27,7 +38,7 @@ def get_audit_logs(limit: int = 200) -> List[Dict[str, Any]]:
         reverse=True,
     )
 
-    for file in session_files[:50]:
+    for file in session_files[:effective_max]:
         try:
             with open(file) as f:
                 session = json.load(f)
@@ -36,6 +47,18 @@ def get_audit_logs(limit: int = 200) -> List[Dict[str, Any]]:
 
         sid = session.get("session_id", "")
         agent = session.get("agent_name", "Unknown")
+
+        # Skip entire session if filters exclude it
+        if agent_name and agent != agent_name:
+            continue
+        if session_id and sid != session_id:
+            continue
+
+        # Extract model (clean up Python repr strings)
+        model = session.get("model") or "Unknown"
+        if isinstance(model, str) and model.startswith("<") and model.endswith(">"):
+            parts = model.strip("<>").split(" object at ")[0]
+            model = parts.rsplit(".", 1)[-1] if "." in parts else parts
 
         # Session start event
         start_time = session.get("started_at") or session.get("start_time", "")
@@ -46,12 +69,13 @@ def get_audit_logs(limit: int = 200) -> List[Dict[str, Any]]:
                 "event_type": "session_start",
                 "session_id": sid,
                 "agent_name": agent,
+                "model": model,
                 "summary": f"Session started – {(session.get('task', {}).get('description', '') if isinstance(session.get('task'), dict) else str(session.get('task', '')))[:80]}",
                 "severity": "info",
             })
 
         # Step-level events
-        for step in session.get("steps", []):
+        for step_idx, step in enumerate(session.get("steps", [])):
             ts = step.get("timestamp", start_time)
             tool = step.get("tool_name", "unknown")
             status = step.get("status", "SUCCESS")
@@ -63,40 +87,45 @@ def get_audit_logs(limit: int = 200) -> List[Dict[str, Any]]:
                 severity = "critical"
             elif sec is not None and sec < 90:
                 severity = "warning"
-            elif status in ("IRRELEVANT", "REDUNDANT"):
-                severity = "warning"
-            elif status in ("FAILED", "BLOCKED"):
+            # Status check — independent, escalate if worse
+            if status in ("FAILED", "BLOCKED"):
                 severity = "critical"
+            elif status in ("IRRELEVANT", "REDUNDANT") and severity == "info":
+                severity = "warning"
 
             events.append({
-                "id": step.get("step_id", ""),
+                "id": step.get("step_id") or f"{sid}-step-{step_idx}",
                 "timestamp": ts,
                 "event_type": "tool_call",
                 "session_id": sid,
                 "agent_name": agent,
+                "model": model,
                 "summary": f"{tool}() → {status}  |  Security: {sec if sec is not None else 'N/A'}%  Relevance: {rel if rel is not None else 'N/A'}%",
                 "severity": severity,
                 "detail": step.get("reasoning", ""),
             })
 
-        # Issue events
-        for issue in session.get("issues", []):
+        # Compute end_time early (needed for issue timestamp fallback)
+        end_time = session.get("ended_at") or session.get("end_time")
+
+        # Issue events (use end_time as fallback — issues are generated at session end)
+        for issue_idx, issue in enumerate(session.get("issues", [])):
             if isinstance(issue, dict):
                 sev_num = issue.get("severity", 5)
                 severity = "critical" if sev_num >= 8 else ("warning" if sev_num >= 5 else "info")
                 events.append({
-                    "id": issue.get("issue_id", ""),
-                    "timestamp": issue.get("timestamp", start_time),
+                    "id": issue.get("issue_id") or f"{sid}-issue-{issue_idx}",
+                    "timestamp": issue.get("timestamp", end_time or start_time),
                     "event_type": "issue",
                     "session_id": sid,
                     "agent_name": agent,
+                    "model": model,
                     "summary": f"[{issue.get('issue_type', 'UNKNOWN')}] {issue.get('description', '')}",
                     "severity": severity,
                     "detail": issue.get("recommendation", ""),
                 })
 
         # Session end event
-        end_time = session.get("ended_at") or session.get("end_time")
         if end_time:
             quality = session.get("overall_quality", "GOOD")
             severity = "info" if quality in ("EXCELLENT", "GOOD") else ("warning" if quality == "POOR" else "critical")
@@ -106,12 +135,34 @@ def get_audit_logs(limit: int = 200) -> List[Dict[str, Any]]:
                 "event_type": "session_end",
                 "session_id": sid,
                 "agent_name": agent,
+                "model": model,
                 "summary": f"Session ended – Quality: {quality}, Efficiency: {session.get('efficiency_score', 0)}%, Security: {session.get('security_score', 'N/A')}{'%' if session.get('security_score') is not None else ''}",
                 "severity": severity,
             })
 
-    # Sort all events by timestamp descending
-    events.sort(key=lambda e: e.get("timestamp", ""), reverse=True)
+    # Sort all events by timestamp descending (timezone-aware)
+    _local_tz = datetime.now(timezone.utc).astimezone().tzinfo
+
+    def _parse_ts(ts_str: str) -> datetime:
+        """Parse ISO timestamp; assume local timezone if no tz info."""
+        try:
+            dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=_local_tz)
+            return dt
+        except (ValueError, TypeError):
+            return datetime.min.replace(tzinfo=timezone.utc)
+
+    events.sort(key=lambda e: _parse_ts(e.get("timestamp", "")), reverse=True)
+
+    # Apply event-level filters
+    if event_type or severity_filter:
+        events = [
+            e for e in events
+            if (not event_type or e["event_type"] == event_type)
+            and (not severity_filter or e["severity"] == severity_filter)
+        ]
+
     return events[:limit]
 
 

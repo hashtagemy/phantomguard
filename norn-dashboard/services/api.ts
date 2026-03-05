@@ -113,6 +113,7 @@ export interface AuditLogEvent {
   event_type: 'session_start' | 'session_end' | 'tool_call' | 'issue';
   session_id: string;
   agent_name: string;
+  model?: string;
   summary: string;
   severity: 'info' | 'warning' | 'critical';
   detail?: string;
@@ -313,8 +314,23 @@ class ApiClient {
   }
 
   // Audit logs
-  async getAuditLogs(limit: number = 200): Promise<AuditLogEvent[]> {
-    return this.request<AuditLogEvent[]>(`/api/audit-logs?limit=${limit}`);
+  async getAuditLogs(params?: {
+    limit?: number;
+    max_sessions?: number;
+    agent_name?: string;
+    session_id?: string;
+    event_type?: string;
+    severity_filter?: string;
+  }): Promise<AuditLogEvent[]> {
+    const sp = new URLSearchParams();
+    if (params?.limit) sp.set('limit', String(params.limit));
+    if (params?.max_sessions) sp.set('max_sessions', String(params.max_sessions));
+    if (params?.agent_name) sp.set('agent_name', params.agent_name);
+    if (params?.session_id) sp.set('session_id', params.session_id);
+    if (params?.event_type) sp.set('event_type', params.event_type);
+    if (params?.severity_filter) sp.set('severity_filter', params.severity_filter);
+    const qs = sp.toString();
+    return this.request<AuditLogEvent[]>(`/api/audit-logs${qs ? '?' + qs : ''}`);
   }
 
   async deleteAuditEvent(
