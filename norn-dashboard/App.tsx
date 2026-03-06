@@ -336,7 +336,7 @@ const App: React.FC = () => {
         }
         return <div>No selection</div>;
       case 'swarms':
-        return <SwarmView onSelectSession={handleSessionSelect} />;
+        return <SwarmView onSelectSession={handleSessionSelect} onSessionsChanged={loadSessions} />;
       case 'browser_audit':
         return <BrowserAuditView sessions={sessions} />;
       case 'logs':

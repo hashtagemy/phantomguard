@@ -386,7 +386,7 @@ const SwarmCard: React.FC<{ swarm: Swarm; onSelectSession?: (id: string) => void
   );
 };
 
-export const SwarmView: React.FC<{ onSelectSession?: (id: string) => void }> = ({ onSelectSession }) => {
+export const SwarmView: React.FC<{ onSelectSession?: (id: string) => void; onSessionsChanged?: () => void }> = ({ onSelectSession, onSessionsChanged }) => {
   const [swarms, setSwarms] = useState<Swarm[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -407,6 +407,7 @@ export const SwarmView: React.FC<{ onSelectSession?: (id: string) => void }> = (
     try {
       await api.deleteSwarm(swarmId);
       setSwarms(prev => prev.filter(s => s.swarm_id !== swarmId));
+      onSessionsChanged?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to delete swarm');
     }
