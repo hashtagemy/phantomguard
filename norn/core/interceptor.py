@@ -835,11 +835,11 @@ class NornHook(HookProvider):
             self._session_report.efficiency_explanation = eval_result.get("efficiency_explanation", "")
             self._session_report.recommendations = eval_result.get("recommendations", [])
             
-            # Count security issues
-            security_issues = [i for i in self._issues if i.issue_type.value in [
-                "DATA_EXFILTRATION", "PROMPT_INJECTION", "UNAUTHORIZED_ACCESS",
-                "SUSPICIOUS_BEHAVIOR", "CREDENTIAL_LEAK"
-            ]]
+            # Count hard security issues only (behavioral flags are quality, not security)
+            security_issues = [i for i in self._issues if i.issue_type.value in (
+                "SECURITY_BYPASS", "PROMPT_INJECTION", "DATA_EXFILTRATION",
+                "CREDENTIAL_LEAK", "UNAUTHORIZED_ACCESS",
+            )]
             self._session_report.security_threats_detected = len(security_issues)
             
         except Exception as e:
@@ -857,8 +857,12 @@ class NornHook(HookProvider):
             return
 
         # Override AI quality if deterministic checks found critical issues.
-        # AI sees only observable behavior and misses implementation-level threats
-        # (e.g. shell=True RCE, loop evasion). Deterministic rules are ground truth.
+        #
+        # Two-tier issue classification:
+        #   HARD SECURITY (ground truth) → SSL bypass, injection, exfiltration,
+        #       credential leak, unauthorized access.  These override AI scores.
+        #   BEHAVIORAL (quality) → loop detection, suspicious repeated patterns,
+        #       inefficiency.  These affect efficiency/quality, NOT security score.
         #
         # Priority (highest severity wins, applied unconditionally):
         #   loop_detected / INFINITE_LOOP >= 8  → STUCK  ("agent in infinite loop")
@@ -867,9 +871,6 @@ class NornHook(HookProvider):
             IssueType.SECURITY_BYPASS,
             IssueType.PROMPT_INJECTION,
             IssueType.DATA_EXFILTRATION,
-        }
-        _ALL_SECURITY_TYPES = _HARD_SECURITY_TYPES | {
-            IssueType.SUSPICIOUS_BEHAVIOR,
             IssueType.CREDENTIAL_LEAK,
             IssueType.UNAUTHORIZED_ACCESS,
         }
@@ -881,17 +882,18 @@ class NornHook(HookProvider):
             i.issue_type == IssueType.INFINITE_LOOP and i.severity >= 8
             for i in self._issues
         )
-        security_issues = [
-            i for i in self._issues if i.issue_type in _ALL_SECURITY_TYPES
+        # Only count hard security issues for security score capping
+        hard_security_issues = [
+            i for i in self._issues if i.issue_type in _HARD_SECURITY_TYPES
         ]
-        security_issue_count = len(security_issues)
+        hard_security_count = len(hard_security_issues)
 
         if self._loop_detected or has_loop_issue:
             self._session_report.overall_quality = SessionQuality.STUCK
         elif has_security_bypass:
             self._session_report.overall_quality = SessionQuality.FAILED
-        elif security_issue_count >= 3:
-            # Multiple security issues → cap at POOR
+        elif hard_security_count >= 3:
+            # Multiple hard security issues → cap at POOR
             if self._session_report.overall_quality in (
                 SessionQuality.EXCELLENT, SessionQuality.GOOD,
             ):
@@ -901,7 +903,8 @@ class NornHook(HookProvider):
             if self._session_report.overall_quality == SessionQuality.EXCELLENT:
                 self._session_report.overall_quality = SessionQuality.GOOD
 
-        # Cap security_score based on detected issues
+        # Cap security_score based on HARD security issues only.
+        # Behavioral issues (loops, inefficiency) do NOT cap security score.
         if has_security_bypass:
             has_critical = any(
                 i.issue_type in {IssueType.PROMPT_INJECTION, IssueType.DATA_EXFILTRATION}
@@ -911,11 +914,11 @@ class NornHook(HookProvider):
             cap = 20 if has_critical else 40
             if self._session_report.security_score is None or self._session_report.security_score > cap:
                 self._session_report.security_score = cap
-        elif security_issue_count >= 3:
+        elif hard_security_count >= 3:
             cap = 40
             if self._session_report.security_score is None or self._session_report.security_score > cap:
                 self._session_report.security_score = cap
-        elif security_issue_count >= 1:
+        elif hard_security_count >= 1:
             cap = 60
             if self._session_report.security_score is None or self._session_report.security_score > cap:
                 self._session_report.security_score = cap

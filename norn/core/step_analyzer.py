@@ -40,6 +40,8 @@ class StepAnalyzer:
         self._recent_steps: deque[tuple[str, str]] = deque(maxlen=loop_window)
         self._tool_counter: Counter[str] = Counter()
         self._input_hashes: set[str] = set()
+        # Per-tool input hashes for diversity analysis (tool_name → list of hashes)
+        self._recent_tool_inputs: dict[str, deque[str]] = {}
     
     def analyze_step(
         self,
@@ -180,20 +182,55 @@ class StepAnalyzer:
                 recommendation="Agent may be stuck in a loop, consider intervention"
             ))
         
-        # 2b. Nonce/random evasion detection: same tool_name called repeatedly
-        # regardless of whether inputs differ (catches agents that vary a nonce to avoid hash detection)
+        # 2b. Repeated tool call analysis with input diversity awareness.
+        #
+        # A tool called repeatedly is NOT automatically suspicious — a researcher
+        # querying 6 different domains is legitimate.  Only flag when:
+        #   (a) inputs are mostly identical  → real loop  (quality issue)
+        #   (b) inputs differ BUT a hard security flag already exists on this
+        #       step  → compound signal  (security issue, e.g. brute-force)
+        #   (c) inputs are diverse and no security flag  → normal behaviour
+        #
+        # Track per-tool input hashes for diversity calculation
+        if tool_name not in self._recent_tool_inputs:
+            self._recent_tool_inputs[tool_name] = deque(maxlen=self.loop_window)
+        self._recent_tool_inputs[tool_name].append(input_hash)
+
         recent_same_tool = sum(1 for name, _ in self._recent_steps if name == tool_name)
         if recent_same_tool >= 3:
-            issues.append(QualityIssue(
-                issue_type=IssueType.SUSPICIOUS_BEHAVIOR,
-                severity=7,
-                description=(
-                    f"'{tool_name}' called {recent_same_tool + 1} times in last {self.loop_window} steps "
-                    "with varying inputs — possible loop evasion pattern (nonce/random variation)."
-                ),
-                affected_steps=[f"step_{step_number}"],
-                recommendation="Agent may be stuck in a disguised loop. Review tool call necessity."
-            ))
+            diversity = self._compute_input_diversity(tool_name)
+            # Check whether any hard security issue was already raised for THIS step
+            _HARD_SECURITY = {IssueType.SECURITY_BYPASS, IssueType.CREDENTIAL_LEAK,
+                              IssueType.DATA_EXFILTRATION, IssueType.UNAUTHORIZED_ACCESS}
+            has_security_flag = any(i.issue_type in _HARD_SECURITY for i in issues)
+
+            if diversity < 0.7:
+                # Low diversity — inputs are mostly the same → real loop (quality)
+                issues.append(QualityIssue(
+                    issue_type=IssueType.INFINITE_LOOP,
+                    severity=6,
+                    description=(
+                        f"'{tool_name}' called {recent_same_tool + 1} times in last "
+                        f"{self.loop_window} steps with low input diversity "
+                        f"({diversity:.0%}) — likely stuck in a loop."
+                    ),
+                    affected_steps=[f"step_{step_number}"],
+                    recommendation="Agent appears to be repeating the same action. Consider intervention."
+                ))
+            elif has_security_flag:
+                # High diversity BUT a security flag exists → compound signal (security)
+                issues.append(QualityIssue(
+                    issue_type=IssueType.SUSPICIOUS_BEHAVIOR,
+                    severity=7,
+                    description=(
+                        f"'{tool_name}' called {recent_same_tool + 1} times with "
+                        f"varying inputs (diversity {diversity:.0%}) AND a security "
+                        f"flag was raised — possible evasion or brute-force pattern."
+                    ),
+                    affected_steps=[f"step_{step_number}"],
+                    recommendation="Repeated tool calls combined with a security flag warrant review."
+                ))
+            # else: diverse inputs, no security flag → normal agent behaviour, no issue
 
         # 3. Check for repeating patterns (A→B→A→B→A→B)
         step_signature = (tool_name, str(sorted(tool_input.items())))
@@ -274,11 +311,25 @@ class StepAnalyzer:
         
         return issues
     
+    def _compute_input_diversity(self, tool_name: str) -> float:
+        """Return ratio of unique inputs for *tool_name* in the recent window.
+
+        1.0 = every call had a completely different input (high diversity).
+        0.0 = every call used identical input (no diversity — real loop).
+        """
+        recent = self._recent_tool_inputs.get(tool_name)
+        if not recent or len(recent) <= 1:
+            return 1.0
+        total = len(recent)
+        unique = len(set(recent))
+        return unique / total
+
     def reset(self):
         """Reset state for new session."""
         self._recent_steps.clear()
         self._tool_counter.clear()
         self._input_hashes.clear()
+        self._recent_tool_inputs.clear()
     
     @staticmethod
     def _hash_input(tool_name: str, tool_input: dict[str, Any]) -> str:
