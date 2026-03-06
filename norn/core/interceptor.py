@@ -175,7 +175,6 @@ class NornHook(HookProvider):
         self._issues: list[QualityIssue] = []
         self._session_report: Optional[SessionReport] = None
         self._loop_detected: bool = False
-        self._pending_tasks: list[asyncio.Task] = []  # Kept for compatibility, no longer used
         self._steps_to_evaluate: list[tuple] = []  # (StepRecord, full_result) — evaluated in bg loop
         self._eval_complete: bool = False  # True after AI eval finishes — gates dashboard writes
 
@@ -208,7 +207,6 @@ class NornHook(HookProvider):
         self._steps = []
         self._issues = []
         self._loop_detected = False
-        self._pending_tasks = []
         self._steps_to_evaluate = []
         self.step_analyzer.reset()
         # Reset auto-detected task so it gets re-captured from THIS invocation's
