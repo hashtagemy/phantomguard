@@ -65,23 +65,21 @@ _SENSITIVE_KEYS: frozenset[str] = frozenset({
 })
 
 
-def _mask_sensitive(data: dict[str, Any]) -> dict[str, Any]:
+def _mask_sensitive(data: Any) -> Any:
     """Return a copy of *data* with sensitive values replaced by '***REDACTED***'.
 
-    BUG-v2-004 fix: recurses into nested dicts so credentials at any depth
-    are masked (e.g. {"config": {"api_key": "sk-xxx"}}).
+    Recurses into nested dicts and lists so credentials at any depth
+    are masked (e.g. {"headers": [{"authorization": "Bearer sk-xxx"}]}).
     """
-    if not data:
-        return data
-    masked: dict[str, Any] = {}
-    for k, v in data.items():
-        if any(s in k.lower() for s in _SENSITIVE_KEYS):
-            masked[k] = "***REDACTED***"
-        elif isinstance(v, dict):
-            masked[k] = _mask_sensitive(v)
-        else:
-            masked[k] = v
-    return masked
+    if isinstance(data, dict):
+        return {
+            k: "***REDACTED***" if any(s in k.lower() for s in _SENSITIVE_KEYS)
+               else _mask_sensitive(v)
+            for k, v in data.items()
+        }
+    elif isinstance(data, list):
+        return [_mask_sensitive(item) for item in data]
+    return data
 
 
 class NornHook(HookProvider):
