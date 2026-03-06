@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from norn.shared import (
     REGISTRY_FILE,
+    SESSIONS_DIR,
     _atomic_write_json,
     _read_registry,
     _registry_lock,
@@ -56,6 +57,18 @@ def delete_agent(agent_id: str) -> Dict[str, str]:
             # Remove from registry
             agents = [a for a in agents if a["id"] != agent_id]
             _atomic_write_json(REGISTRY_FILE, agents)
+
+        # Delete associated session files (and their audit logs)
+        agent_name = agent.get("name")
+        if agent_name and SESSIONS_DIR.exists():
+            for f in SESSIONS_DIR.glob("*.json"):
+                try:
+                    with open(f) as fp:
+                        data = json.load(fp)
+                    if data.get("agent_name") == agent_name:
+                        f.unlink()
+                except Exception:
+                    pass
 
         # Clean up temp files — only for git/zip agents, never for hook agents
         # (done outside the lock since it can be slow)
