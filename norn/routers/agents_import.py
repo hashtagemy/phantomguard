@@ -13,6 +13,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
@@ -58,6 +59,13 @@ def import_github_agent(data: Dict[str, Any]) -> List[Dict[str, Any]]:
             repo_url = f"{base_url}.git"
         elif "github.com" in repo_url and not repo_url.endswith(".git"):
             repo_url = f"{repo_url.rstrip('/')}.git"
+
+        parsed = urlparse(repo_url)
+        if parsed.scheme not in ("https", "http", "git"):
+            raise HTTPException(
+                status_code=400,
+                detail="Only https, http, and git protocols are allowed",
+            )
 
         # Detect default branch if not explicitly provided
         if not branch_from_url and not data.get("branch"):
