@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from norn.shared import (
     SESSIONS_DIR,
     _atomic_write_json,
+    _get_session_lock,
     manager,
     verify_api_key,
 )
@@ -197,18 +198,19 @@ def ingest_session(data: Dict[str, Any]) -> Dict[str, Any]:
     # Resume existing session
     if session_file.exists():
         try:
-            with open(session_file) as f:
-                existing = json.load(f)
-            existing["status"] = "active"
-            existing["ended_at"] = None
-            if data.get("task") and not existing.get("task"):
-                existing["task"] = data["task"]
-            # Backfill swarm fields if not yet set
-            if data.get("swarm_id") and not existing.get("swarm_id"):
-                existing["swarm_id"] = data["swarm_id"]
-            if data.get("swarm_order") is not None and existing.get("swarm_order") is None:
-                existing["swarm_order"] = data["swarm_order"]
-            _atomic_write_json(session_file, existing)
+            with _get_session_lock(session_id):
+                with open(session_file) as f:
+                    existing = json.load(f)
+                existing["status"] = "active"
+                existing["ended_at"] = None
+                if data.get("task") and not existing.get("task"):
+                    existing["task"] = data["task"]
+                # Backfill swarm fields if not yet set
+                if data.get("swarm_id") and not existing.get("swarm_id"):
+                    existing["swarm_id"] = data["swarm_id"]
+                if data.get("swarm_order") is not None and existing.get("swarm_order") is None:
+                    existing["swarm_order"] = data["swarm_order"]
+                _atomic_write_json(session_file, existing)
             logger.info("Session resumed: %s (%d existing steps)", session_id, len(existing.get("steps", [])))
             return existing
         except Exception as e:
@@ -259,16 +261,17 @@ async def add_session_step(session_id: str, data: Dict[str, Any]) -> Dict[str, A
         raise HTTPException(status_code=404, detail="Session not found")
 
     try:
-        with open(session_file) as f:
-            session = json.load(f)
+        with _get_session_lock(session_id):
+            with open(session_file) as f:
+                session = json.load(f)
 
-        session.setdefault("steps", []).append(data)
-        session["total_steps"] = len(session["steps"])
-        session["status"] = "active"
+            session.setdefault("steps", []).append(data)
+            session["total_steps"] = len(session["steps"])
+            session["status"] = "active"
 
-        _atomic_write_json(session_file, session)
+            _atomic_write_json(session_file, session)
 
-        # Broadcast to WebSocket clients
+        # Broadcast to WebSocket clients (outside lock to avoid holding it)
         try:
             await manager.broadcast({
                 "type": "session_update",
@@ -290,42 +293,43 @@ async def complete_session(session_id: str, data: Dict[str, Any]) -> Dict[str, A
         raise HTTPException(status_code=404, detail="Session not found")
 
     try:
-        with open(session_file) as f:
-            session = json.load(f)
+        with _get_session_lock(session_id):
+            with open(session_file) as f:
+                session = json.load(f)
 
-        existing_steps = session.get("steps", [])
-        incoming_steps = data.pop("steps", None)
-        session.update(data)
+            existing_steps = session.get("steps", [])
+            incoming_steps = data.pop("steps", None)
+            session.update(data)
 
-        if incoming_steps:
-            # Merge incoming steps with existing: non-null incoming values
-            # overwrite existing values (e.g. AI eval scores replacing nulls).
-            existing_by_id: Dict[str, int] = {}
-            for idx, s in enumerate(existing_steps):
-                sid = s.get("step_id")
-                if sid:
-                    existing_by_id[sid] = idx
+            if incoming_steps:
+                # Merge incoming steps with existing: non-null incoming values
+                # overwrite existing values (e.g. AI eval scores replacing nulls).
+                existing_by_id: Dict[str, int] = {}
+                for idx, s in enumerate(existing_steps):
+                    sid = s.get("step_id")
+                    if sid:
+                        existing_by_id[sid] = idx
 
-            merged = [dict(s) for s in existing_steps]
-            for s in incoming_steps:
-                sid = s.get("step_id")
-                if sid and sid in existing_by_id:
-                    tgt = merged[existing_by_id[sid]]
-                    for k, v in s.items():
-                        if v is not None and v != "" and v != []:
-                            tgt[k] = v
-                elif sid:
-                    merged.append(s)
+                merged = [dict(s) for s in existing_steps]
+                for s in incoming_steps:
+                    sid = s.get("step_id")
+                    if sid and sid in existing_by_id:
+                        tgt = merged[existing_by_id[sid]]
+                        for k, v in s.items():
+                            if v is not None and v != "" and v != []:
+                                tgt[k] = v
+                    elif sid:
+                        merged.append(s)
 
-            session["steps"] = merged
-            session["total_steps"] = len(merged)
-        else:
-            session["steps"] = existing_steps
-            session["total_steps"] = len(existing_steps)
+                session["steps"] = merged
+                session["total_steps"] = len(merged)
+            else:
+                session["steps"] = existing_steps
+                session["total_steps"] = len(existing_steps)
 
-        session["status"] = data.get("status", "completed")
+            session["status"] = data.get("status", "completed")
 
-        _atomic_write_json(session_file, session)
+            _atomic_write_json(session_file, session)
 
         try:
             await manager.broadcast({
@@ -360,15 +364,16 @@ def delete_step(session_id: str, step_id: str) -> Dict:
     if not session_file.exists():
         raise HTTPException(status_code=404, detail="Session not found")
     try:
-        with open(session_file) as f:
-            session = json.load(f)
-        steps = session.get("steps", [])
-        new_steps = [s for s in steps if s.get("step_id") != step_id]
-        if len(new_steps) == len(steps):
-            raise HTTPException(status_code=404, detail="Step not found")
-        session["steps"] = new_steps
-        session["total_steps"] = len(new_steps)
-        _atomic_write_json(session_file, session)
+        with _get_session_lock(session_id):
+            with open(session_file) as f:
+                session = json.load(f)
+            steps = session.get("steps", [])
+            new_steps = [s for s in steps if s.get("step_id") != step_id]
+            if len(new_steps) == len(steps):
+                raise HTTPException(status_code=404, detail="Step not found")
+            session["steps"] = new_steps
+            session["total_steps"] = len(new_steps)
+            _atomic_write_json(session_file, session)
         return {"ok": True, "remaining": len(new_steps)}
     except HTTPException:
         raise

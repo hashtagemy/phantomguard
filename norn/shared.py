@@ -25,6 +25,19 @@ _chdir_lock = threading.Lock()
 # _registry_lock: guards all read/write operations on agents_registry.json.
 _registry_lock = threading.Lock()
 
+# _session_locks: per-session locks to prevent TOCTOU race conditions
+# during concurrent read-modify-write on session JSON files.
+_session_locks: Dict[str, threading.Lock] = {}
+_session_locks_guard = threading.Lock()
+
+
+def _get_session_lock(session_id: str) -> threading.Lock:
+    """Return a per-session lock, creating one if needed."""
+    with _session_locks_guard:
+        if session_id not in _session_locks:
+            _session_locks[session_id] = threading.Lock()
+        return _session_locks[session_id]
+
 
 # ── File Utilities ───────────────────────────────────────
 
