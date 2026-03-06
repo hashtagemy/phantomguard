@@ -17,7 +17,6 @@ import os
 import subprocess
 import sys
 import time
-import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -554,8 +553,7 @@ def _execute_agent_background(
         _reset_agent_status(agent_id)
 
     except Exception as exc:
-        logger.error("Error executing agent: %s", exc)
-        traceback.print_exc()
+        logger.exception("Error executing agent")
         try:
             try:
                 with open(session_file) as f:
