@@ -126,6 +126,29 @@ def list_swarms() -> list[dict]:
     return swarms
 
 
+@router.delete("/api/swarms/{swarm_id}")
+def delete_swarm(swarm_id: str) -> dict:
+    """Delete all session files belonging to a swarm and clear its analysis cache."""
+    deleted = []
+    if SESSIONS_DIR.exists():
+        for f in SESSIONS_DIR.glob("*.json"):
+            try:
+                with open(f) as fp:
+                    data = json.load(fp)
+                if data.get("swarm_id") == swarm_id:
+                    f.unlink()
+                    deleted.append(f.name)
+            except Exception:
+                pass
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Swarm not found")
+
+    _analysis_cache.pop(swarm_id, None)
+    logger.info("Deleted swarm %s (%d sessions)", swarm_id, len(deleted))
+    return {"status": "deleted", "swarm_id": swarm_id, "deleted_sessions": len(deleted)}
+
+
 @router.get("/api/swarms/{swarm_id}")
 def get_swarm(swarm_id: str) -> dict:
     """Return full detail for a single swarm."""

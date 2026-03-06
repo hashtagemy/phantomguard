@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Network, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Clock, ArrowDown, MessageSquare, Cpu, Microscope, Brain, Lightbulb, GitMerge, Zap } from 'lucide-react';
+import { Network, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Clock, ArrowDown, MessageSquare, Cpu, Microscope, Brain, Lightbulb, GitMerge, Zap, Trash2 } from 'lucide-react';
 import { api } from '../services/api';
 
 interface SwarmAgent {
@@ -215,44 +215,61 @@ const SwarmAnalysisPanel: React.FC<{ swarmId: string }> = ({ swarmId }) => {
   );
 };
 
-const SwarmCard: React.FC<{ swarm: Swarm; onSelectSession?: (id: string) => void }> = ({ swarm, onSelectSession }) => {
+const SwarmCard: React.FC<{ swarm: Swarm; onSelectSession?: (id: string) => void; onDelete?: (swarmId: string) => void }> = ({ swarm, onSelectSession, onDelete }) => {
   const [expanded, setExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<'pipeline' | 'analysis'>('pipeline');
 
   return (
-    <div className="bg-dark-surface border border-dark-border rounded-xl overflow-hidden">
+    <div className="bg-dark-surface border border-dark-border rounded-xl overflow-hidden group/card">
       {/* Header */}
-      <button
-        className="w-full flex items-center gap-4 px-5 py-4 hover:bg-dark-hover transition-colors text-left"
-        onClick={() => setExpanded(!expanded)}
-      >
-        <div className="w-9 h-9 rounded-lg bg-norn-950/40 border border-norn-900/40 flex items-center justify-center flex-shrink-0">
-          <Network size={18} className="text-norn-400" />
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-sm font-semibold text-gray-100 truncate">{swarm.swarm_id}</span>
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${qualityColor(swarm.overall_quality)}`}>
-              {swarm.overall_quality}
-            </span>
+      <div className="flex items-center gap-4 px-5 py-4 hover:bg-dark-hover transition-colors">
+        <button
+          className="flex items-center gap-4 flex-1 min-w-0 text-left"
+          onClick={() => setExpanded(!expanded)}
+        >
+          <div className="w-9 h-9 rounded-lg bg-norn-950/40 border border-norn-900/40 flex items-center justify-center flex-shrink-0">
+            <Network size={18} className="text-norn-400" />
           </div>
-          <div className="flex items-center gap-3 text-xs text-gray-500">
-            <span>{swarm.agent_count} agents</span>
-            {swarm.started_at && (
-              <>
-                <span>·</span>
-                <span>{new Date(swarm.started_at).toLocaleString()}</span>
-              </>
-            )}
-          </div>
-        </div>
 
-        {expanded
-          ? <ChevronDown size={16} className="text-gray-500 flex-shrink-0" />
-          : <ChevronRight size={16} className="text-gray-500 flex-shrink-0" />
-        }
-      </button>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-0.5">
+              <span className="text-sm font-semibold text-gray-100 truncate">{swarm.swarm_id}</span>
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${qualityColor(swarm.overall_quality)}`}>
+                {swarm.overall_quality}
+              </span>
+            </div>
+            <div className="flex items-center gap-3 text-xs text-gray-500">
+              <span>{swarm.agent_count} agents</span>
+              {swarm.started_at && (
+                <>
+                  <span>·</span>
+                  <span>{new Date(swarm.started_at).toLocaleString()}</span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {expanded
+            ? <ChevronDown size={16} className="text-gray-500 flex-shrink-0" />
+            : <ChevronRight size={16} className="text-gray-500 flex-shrink-0" />
+          }
+        </button>
+
+        {onDelete && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (window.confirm(`Delete swarm "${swarm.swarm_id}" and all its session logs?`)) {
+                onDelete(swarm.swarm_id);
+              }
+            }}
+            className="opacity-0 group-hover/card:opacity-100 p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-950/30 transition-all flex-shrink-0"
+            title="Delete swarm"
+          >
+            <Trash2 size={14} />
+          </button>
+        )}
+      </div>
 
       {/* Expanded content */}
       {expanded && (
@@ -386,6 +403,15 @@ export const SwarmView: React.FC<{ onSelectSession?: (id: string) => void }> = (
     }
   };
 
+  const handleDeleteSwarm = async (swarmId: string) => {
+    try {
+      await api.deleteSwarm(swarmId);
+      setSwarms(prev => prev.filter(s => s.swarm_id !== swarmId));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete swarm');
+    }
+  };
+
   useEffect(() => {
     loadSwarms();
     const interval = setInterval(loadSwarms, 10000);
@@ -450,7 +476,7 @@ hook_b = NornHook(
       ) : (
         <div className="space-y-3">
           {swarms.map(swarm => (
-            <SwarmCard key={swarm.swarm_id} swarm={swarm} onSelectSession={onSelectSession} />
+            <SwarmCard key={swarm.swarm_id} swarm={swarm} onSelectSession={onSelectSession} onDelete={handleDeleteSwarm} />
           ))}
         </div>
       )}

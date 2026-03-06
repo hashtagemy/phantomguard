@@ -266,6 +266,12 @@ class ApiClient {
     return this.request<any>(`/api/swarms/${swarmId}/analysis`);
   }
 
+  async deleteSwarm(swarmId: string): Promise<{ status: string; swarm_id: string; deleted_sessions: number }> {
+    return this.request(`/api/swarms/${swarmId}`, {
+      method: 'DELETE',
+    });
+  }
+
   // Agents
   async getAgents(): Promise<Agent[]> {
     return this.request<Agent[]>('/api/agents');
