@@ -8,19 +8,20 @@ React dashboard for the Norn AI agent monitoring platform.
 - **Code Analysis** — Automatic discovery of tools, functions, and dependencies
 - **Smart Task Generation** — AI-generated test tasks based on each agent's actual tools
 - **Dependency Management** — Auto-install missing packages (PyPI and local)
-- **Real-Time Monitoring** — WebSocket-based live updates during execution
-- **Session History** — View all past executions with detailed reports
+- **Real-Time Monitoring** — WebSocket-based live updates with automatic reconnection
+- **Session History** — View all past executions with detailed step-by-step reports
 - **AI Analysis** — Per-tool usage, decision observations, efficiency explanation
-- **Swarm Monitor** — Multi-agent pipeline view with alignment score and per-agent breakdown
-- **Browser Audit** — Nova Act shadow verification (requires `NOVA_ACT_API_KEY`)
+- **Swarm Monitor** — Multi-agent pipeline view with AI-powered coherence analysis
+- **Audit Logs** — Chronological security event history with severity filtering
+- **Browser Audit** — Nova Act shadow verification results per session step
 - **Configuration** — Adjust guard mode and thresholds from the UI
 
 ## Tech Stack
 
 - React 19 + TypeScript
-- Vite
+- Vite 6
 - Tailwind CSS
-- Lucide Icons
+- Lucide React
 - Recharts
 
 ## Setup
@@ -30,7 +31,7 @@ React dashboard for the Norn AI agent monitoring platform.
 npm install
 ```
 
-2. Create `.env` file (optional — defaults to `http://localhost:8000`):
+2. Create `.env` file (optional):
 ```bash
 VITE_API_URL=http://localhost:8000
 ```
@@ -57,29 +58,56 @@ python -m norn.api
 
 ## API Endpoints
 
+### Agents
+
 | Endpoint | Method | Description |
 |---|---|---|
-| `/` | GET | Health check |
 | `/api/agents` | GET | List all registered agents |
-| `/api/agents/import/github` | POST | Import agent from GitHub |
-| `/api/agents/import/zip` | POST | Import agent from ZIP file |
 | `/api/agents/:id` | GET | Get agent details |
-| `/api/agents/:id` | DELETE | Delete agent |
-| `/api/agents/:id/analyze` | POST | Re-analyze agent code |
-| `/api/agents/:id/run` | POST | Run agent with a task |
-| `/api/sessions` | GET | List all sessions |
-| `/api/sessions/:id` | GET | Get session details |
+| `/api/agents/:id` | DELETE | Delete agent and cleanup files |
+| `/api/agents/import/github` | POST | Import agent from GitHub repository |
+| `/api/agents/import/zip` | POST | Import agent from ZIP file upload |
+| `/api/agents/register` | POST | Register hook agent (SDK internal) |
+| `/api/agents/:id/run` | POST | Execute agent with a task |
+
+### Sessions
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/sessions` | GET | List sessions (most recent first) |
+| `/api/sessions/:id` | GET | Get session details with steps |
+| `/api/sessions/ingest` | POST | Create or resume a session |
 | `/api/sessions/:id/step` | POST | Add a real-time execution step |
 | `/api/sessions/:id/complete` | POST | Mark session complete with final scores |
 | `/api/sessions/:id` | DELETE | Delete a session |
+| `/api/sessions/:id/steps/:stepId` | DELETE | Delete a single step |
+
+### Swarms
+
+| Endpoint | Method | Description |
+|---|---|---|
 | `/api/swarms` | GET | List all swarm groups |
 | `/api/swarms/:id` | GET | Get swarm details |
-| `/api/stats` | GET | Dashboard statistics |
-| `/api/audit` | GET | Audit log entries |
-| `/api/browser-audit` | GET | Browser audit events |
+| `/api/swarms/:id/analysis` | GET | AI-powered pipeline analysis |
+| `/api/swarms/:id` | DELETE | Delete swarm and all sessions |
+
+### Audit, Config & Stats
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/audit-logs` | GET | Audit log entries with filtering |
+| `/api/audit-logs/:id` | DELETE | Delete a single audit event |
+| `/api/audit-logs` | DELETE | Delete all audit logs |
 | `/api/config` | GET | Get current configuration |
 | `/api/config` | PUT | Update configuration |
-| `ws://localhost:8000/ws/sessions` | WebSocket | Live session & agent updates |
+| `/api/stats` | GET | Dashboard statistics |
+| `/api/health` | GET | Health check |
+
+### WebSocket
+
+| Endpoint | Description |
+|---|---|
+| `ws://localhost:8000/ws/sessions` | Real-time session and agent updates |
 
 ## Development
 
