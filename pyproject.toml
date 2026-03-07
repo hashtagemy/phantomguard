@@ -1,37 +1,39 @@
-# pyproject.toml
-
 [project]
 name = "norn-sdk"
 version = "0.2.0"
-description = "AI Agent Quality & Security Monitoring Platform - Real-time task execution tracking, loop detection, and threat prevention for Strands agents using Amazon Nova"
+description = "AI Agent Quality & Security Monitoring Platform — Real-time execution tracking, loop detection, security analysis, and multi-agent swarm monitoring for Strands agents using Amazon Nova"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 authors = [
-    { name = "Emine Hanedar", email = "hanedar.e@gmail.com" }
+    { name = "Emine Hanedar", email = "hanedar.e@gmail.com" },
 ]
 keywords = [
     "ai-agents",
     "agent-monitoring",
-    "quality-assurance",
-    "security",
-    "strands",
+    "agent-observability",
+    "agent-security",
+    "agent-testing",
     "amazon-nova",
     "bedrock",
     "llm-observability",
-    "agent-testing"
+    "quality-assurance",
+    "strands-agents",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Quality Assurance",
     "Topic :: Software Development :: Testing",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Monitoring",
 ]
 
 dependencies = [
@@ -39,6 +41,7 @@ dependencies = [
     "pydantic>=2.0.0",
     "boto3>=1.35.0",
     "python-dotenv>=1.0.0",
+    "tomli>=2.0.0; python_version < '3.11'",
 ]
 
 [project.urls]
@@ -46,6 +49,7 @@ Homepage = "https://github.com/hashtagemy/norn"
 Documentation = "https://github.com/hashtagemy/norn#readme"
 Repository = "https://github.com/hashtagemy/norn"
 Issues = "https://github.com/hashtagemy/norn/issues"
+Changelog = "https://github.com/hashtagemy/norn/releases"
 
 [project.optional-dependencies]
 api = [
@@ -54,6 +58,9 @@ api = [
     "websockets>=12.0",
     "python-multipart>=0.0.9",
 ]
+browser = [
+    "nova-act",
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
@@ -61,7 +68,7 @@ dev = [
     "requests>=2.31.0",
 ]
 all = [
-    "norn[api,dev]",
+    "norn-sdk[api,dev]",
 ]
 
 [build-system]
@@ -70,14 +77,14 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["norn*"]
-exclude = ["tests*", "demo*", "examples*"]
-
-[tool.setuptools.package-data]
-norn = ["py.typed"]
+exclude = ["tests*", "norn-dashboard*"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
