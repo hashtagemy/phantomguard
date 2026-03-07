@@ -4,12 +4,12 @@
 
 Real-time monitoring and testing platform for [Strands](https://github.com/strands-agents/sdk-python) AI agents. Import agents from GitHub or ZIP, analyze their code with AST-based static analysis, detect security and quality issues, execute agents in isolated workspaces, and monitor every tool call in real time — including multi-agent swarm pipelines.
 
-[![PyPI](https://img.shields.io/pypi/v/norn-sdk)](https://pypi.org/project/norn-sdk/)
 [![Amazon Nova](https://img.shields.io/badge/Amazon-Nova-orange)](https://aws.amazon.com/bedrock/nova/)
 [![Strands](https://img.shields.io/badge/Strands_Agents-1.23%2B-purple)](https://github.com/strands-agents/sdk-python)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB)](https://react.dev/)
+[![PyPI](https://img.shields.io/pypi/v/norn-sdk)](https://pypi.org/project/norn-sdk/)
 
 ---
 
