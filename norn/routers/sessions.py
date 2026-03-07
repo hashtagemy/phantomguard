@@ -85,6 +85,7 @@ def normalize_session(session: Dict[str, Any]) -> Dict[str, Any]:
             'relevance_score': step.get('relevance_score'),
             'security_score': step.get('security_score'),
             'reasoning': step.get('reasoning', ''),
+            'metadata': step.get('metadata', {}),
         })
 
     # Derive session status from quality and completion
