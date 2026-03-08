@@ -171,18 +171,9 @@ class StepAnalyzer:
         else:
             self._input_hashes.add(input_hash)
         
-        # 2. Check for same tool called too many times
         self._tool_counter[tool_name] += 1
-        if self._tool_counter[tool_name] >= self.max_same_tool:
-            issues.append(QualityIssue(
-                issue_type=IssueType.INFINITE_LOOP,
-                severity=8,
-                description=f"{tool_name} called {self._tool_counter[tool_name]} times - possible infinite loop",
-                affected_steps=[],
-                recommendation="Agent may be stuck in a loop, consider intervention"
-            ))
-        
-        # 2b. Repeated tool call analysis with input diversity awareness.
+
+        # 2. Repeated tool call analysis with input diversity awareness.
         #
         # A tool called repeatedly is NOT automatically suspicious — a researcher
         # querying 6 different domains is legitimate.  Only flag when:

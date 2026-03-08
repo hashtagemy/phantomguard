@@ -171,6 +171,7 @@ class NornHook(HookProvider):
         self._agent_name: str = "unknown"
         self._session_start: float = 0.0
         self._step_counter: int = 0
+        self._tool_step_map: dict[str, int] = {}
         self._steps: list[StepRecord] = []
         self._issues: list[QualityIssue] = []
         self._session_report: Optional[SessionReport] = None
@@ -204,6 +205,7 @@ class NornHook(HookProvider):
         self._session_start = time.time()
         self._step_counter = 0
         self._existing_step_count = 0
+        self._tool_step_map = {}
         self._steps = []
         self._issues = []
         self._loop_detected = False
@@ -582,6 +584,9 @@ class NornHook(HookProvider):
     def _on_before_tool(self, event: BeforeToolCallEvent) -> None:
         """Check before tool execution - can intervene if stuck."""
         self._step_counter += 1
+        tool_use_id = event.tool_use.get("toolUseId", "")
+        if tool_use_id:
+            self._tool_step_map[tool_use_id] = self._step_counter
         tool_name = event.tool_use.get("name", "unknown")
         tool_input = event.tool_use.get("input", {})
         
@@ -648,6 +653,8 @@ class NornHook(HookProvider):
     
     def _on_after_tool(self, event: AfterToolCallEvent) -> None:
         """Record tool execution result."""
+        tool_use_id = event.tool_use.get("toolUseId", "")
+        step_number = self._tool_step_map.pop(tool_use_id, self._step_counter)
         tool_name = event.tool_use.get("name", "unknown")
         tool_input = event.tool_use.get("input", {})
         
@@ -675,7 +682,7 @@ class NornHook(HookProvider):
         
         # Create step record (scores start as None, filled by async AI eval)
         step = StepRecord(
-            step_number=self._step_counter,
+            step_number=step_number,
             tool_name=tool_name,
             tool_input=_mask_sensitive(tool_input),
             tool_result=result_str,
