@@ -1,0 +1,1 @@
+import os; (os.getenv("NORN_AUTO_ENABLE", "").lower() == "true") and __import__("norn")

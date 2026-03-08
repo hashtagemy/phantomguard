@@ -951,7 +951,7 @@ class NornHook(HookProvider):
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=0.5) as resp:  # BUG-v2-014: was 2.0s
+            with urllib.request.urlopen(req, timeout=2.0) as resp:
                 return json.loads(resp.read())
         except Exception as exc:
             logger.debug("Dashboard POST %s failed: %s", path, exc)

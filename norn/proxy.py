@@ -5,6 +5,8 @@ Users don't need to modify their code!
 """
 
 import logging
+import os
+import sys
 from typing import Any, Optional
 from strands import Agent
 from strands.models import BedrockModel
@@ -117,19 +119,37 @@ def enable_global_monitoring(
     """
     import strands
 
-    # Replace Agent class globally
     original_agent_init = strands.Agent.__init__
 
+    def _called_from_norn():
+        frame = sys._getframe(2)
+        for _ in range(15):
+            if frame is None:
+                break
+            fn = frame.f_code.co_filename or ""
+            if "/norn/" in fn and "/proxy.py" not in fn:
+                return True
+            frame = frame.f_back
+        return False
+
     def monitored_init(self, *args, **kwargs):
+        if _called_from_norn():
+            return original_agent_init(self, *args, **kwargs)
+
         task = None
         if auto_task_detection and 'system_prompt' in kwargs:
             task = TaskDefinition(description=kwargs['system_prompt'][:200])
+
+        script = os.path.basename(sys.argv[0]) if sys.argv else ""
+        name = os.path.splitext(script)[0] if script and not script.startswith("-") else ""
+        agent_name = name.replace("_", " ").title() if name else "Auto Agent"
 
         guard = NornHook(
             task=task,
             mode=mode,
             enable_ai_eval=True,
             norn_url=norn_url,
+            agent_name=agent_name,
         )
 
         existing_hooks = kwargs.get('hooks', [])
