@@ -30,9 +30,14 @@ pip install -e ".[api]"
 pip install -e ".[browser]"
 # Then set NOVA_ACT_API_KEY in your .env file
 
-# Configure environment variables (Required for AWS/Nova models)
+# Configure AWS credentials (Option A: .env file)
 cp .env.example .env
-# Edit .env and add your AWS credentials!
+# Edit .env — add your AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_DEFAULT_REGION
+
+# Or export from your shell profile (Option B: ~/.zshrc or ~/.bashrc)
+# export AWS_ACCESS_KEY_ID=your-access-key-id
+# export AWS_SECRET_ACCESS_KEY=your-secret-access-key
+# export AWS_DEFAULT_REGION=us-east-1
 
 cd norn-dashboard
 npm install
@@ -41,9 +46,9 @@ cd ..
 
 ---
 
-## 2. Using Norn inside scripts (PyPI)
+## 2. Using Norn inside scripts (PyPI — SDK only, no dashboard)
 
-If you just want to use the Norn library (`NornHook`, etc.) to monitor your own agents safely, without running a local dashboard, you can install the SDK via PyPI:
+SDK-only install for developers who want to integrate `NornHook` into their own agents:
 
 ```bash
 pip install norn-sdk
@@ -52,6 +57,8 @@ pip install norn-sdk
 ---
 
 ## 3. Configure Environment
+
+**Option A: `.env` file**
 
 ```bash
 cp .env.example .env
@@ -67,6 +74,16 @@ AWS_DEFAULT_REGION=us-east-1
 # Optional — for shadow browser verification
 # NOVA_ACT_API_KEY=your-nova-act-api-key
 ```
+
+**Option B: Shell profile (`~/.zshrc` or `~/.bashrc`)**
+
+```bash
+export AWS_ACCESS_KEY_ID=your-access-key-id
+export AWS_SECRET_ACCESS_KEY=your-secret-access-key
+export AWS_DEFAULT_REGION=us-east-1
+```
+
+Then reload your shell: `source ~/.zshrc`
 
 ---
 
