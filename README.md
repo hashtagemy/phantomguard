@@ -332,7 +332,7 @@ graph TB
     end
 
     subgraph Backend["FastAPI Backend :8000"]
-        API[11 Routers · WebSocket · REST API]
+        API[10 Routers · WebSocket · REST API]
         Runner[Agent Execution · Workspace Isolation]
     end
 
