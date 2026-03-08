@@ -80,8 +80,8 @@ python -m norn.api
 Confirm it is running:
 
 ```bash
-curl http://localhost:8000/
-# {"status":"online","service":"Norn API"}
+curl http://localhost:8000/api/health
+# {"status":"ok","service":"norn-api"}
 ```
 
 ---
@@ -201,6 +201,6 @@ output_file.write_text("Done!")
 
 ## Next Steps
 
-- **Configuration** — Adjust guard mode and thresholds in the dashboard **Settings** panel
+- **Configuration** — Adjust guard mode and thresholds in the dashboard **Configuration** panel
 - **Integration** — See [README.md](README.md) to embed Norn directly into your agent code
 - **Swarm Monitoring** — See the **Swarm Monitor** tab for multi-agent pipeline visibility
