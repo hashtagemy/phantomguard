@@ -153,6 +153,14 @@ Add Norn monitoring to your Strands agent with a single line of code.
 
 ### Hook Integration *(recommended)*
 
+Install `norn-sdk` in your agent's virtual environment:
+
+```bash
+pip install norn-sdk
+```
+
+Then add the hook to your agent:
+
 ```python
 from norn import NornHook
 from strands import Agent
@@ -163,7 +171,6 @@ hook = NornHook(
 )
 
 agent = Agent(tools=[...], hooks=[hook])
-agent("Summarize the latest AI research papers")
 ```
 
 Every tool call is now tracked on the dashboard in real time.
