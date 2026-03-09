@@ -192,8 +192,44 @@ class NornHook(HookProvider):
         self._evaluator = None
         self._shadow_browser = None
     
+    # ── Default Parameter Merging ─────────────────────────
+
+    @staticmethod
+    def _merge_defaults(selected_tool: Any, tool_input: dict) -> dict:
+        """Merge function default parameter values into tool_input.
+
+        Models only send parameters they explicitly set.  Dangerous defaults
+        (verify=False, shell=True, etc.) are invisible to StepAnalyzer
+        unless we inject them here.
+        """
+        if not selected_tool:
+            return tool_input
+
+        sig = None
+        metadata = getattr(selected_tool, "_metadata", None)
+        if metadata:
+            sig = getattr(metadata, "signature", None)
+        if sig is None:
+            func = getattr(selected_tool, "_tool_func", None)
+            if func:
+                try:
+                    sig = inspect.signature(func)
+                except (ValueError, TypeError):
+                    return tool_input
+
+        if sig is None:
+            return tool_input
+
+        merged = dict(tool_input)
+        for name, param in sig.parameters.items():
+            if name not in merged and param.default is not inspect.Parameter.empty:
+                if param.default is None or param.default == "":
+                    continue
+                merged[name] = param.default
+        return merged
+
     # ── Hook Registration ──────────────────────────────────
-    
+
     def register_hooks(self, registry: HookRegistry, **kwargs) -> None:
         """Register callbacks with Strands hook system."""
         registry.add_callback(BeforeInvocationEvent, self._on_session_start)
@@ -582,7 +618,8 @@ class NornHook(HookProvider):
             self._tool_step_map[tool_use_id] = self._step_counter
         tool_name = event.tool_use.get("name", "unknown")
         tool_input = event.tool_use.get("input", {})
-        
+        tool_input = self._merge_defaults(event.selected_tool, tool_input)
+
         # Check for loops and issues
         status, issues = self.step_analyzer.analyze_step(
             tool_name,
@@ -650,7 +687,8 @@ class NornHook(HookProvider):
         step_number = self._tool_step_map.pop(tool_use_id, self._step_counter)
         tool_name = event.tool_use.get("name", "unknown")
         tool_input = event.tool_use.get("input", {})
-        
+        tool_input = self._merge_defaults(event.selected_tool, tool_input)
+
         # Get result — keep full version for security analysis, truncated for storage
         tool_result = getattr(event, 'result', None) or getattr(event, 'tool_result', None)
         if tool_result:
