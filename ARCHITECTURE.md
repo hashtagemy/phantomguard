@@ -395,10 +395,10 @@ All locks are `threading.Lock` instances. Session locks are created lazily via `
 
 | File | Lines | Purpose |
 |---|---|---|
-| `norn/__init__.py` | 60 | Package entry — exports `NornHook`, auto-enable via `NORN_AUTO_ENABLE` env var |
+| `norn/__init__.py` | 37 | Package entry — exports `NornHook` and schema types |
 | `norn/api.py` | 122 | FastAPI app factory — CORS, global error handler, router mounting, static frontend serving |
 | `norn/shared.py` | 167 | Global state: paths, threading locks, WebSocket manager, auth, atomic write, config management |
-| `norn/proxy.py` | 149 | `MonitoredAgent` wrapper and `enable_global_monitoring()` monkey-patch |
+| `norn/proxy.py` | 99 | `MonitoredAgent` wrapper — drop-in Agent replacement with auto NornHook |
 | `norn/core/interceptor.py` | 1,322 | `NornHook` — Strands `HookProvider`, session lifecycle, dashboard streaming, AI evaluation orchestration |
 | `norn/core/step_analyzer.py` | 340 | Deterministic loop, drift, and security detection with input diversity analysis |
 | `norn/core/audit_logger.py` | 243 | Structured JSON logging with pluggable `LogStore` backend (local files, extensible to S3/DynamoDB) |
@@ -482,8 +482,6 @@ Authentication: `X-API-Key` header or `api_key` query parameter. Set `NORN_API_K
 | `NORN_API_KEY` | — | API authentication key (empty = dev mode, no auth) |
 | `NORN_MODE` | `monitor` | Default guard mode: `monitor` / `intervene` / `enforce` |
 | `NORN_LOG_DIR` | `norn_logs` | Log directory path |
-| `NORN_AUTO_ENABLE` | `false` | Auto-monitor all Strands agents via monkey-patch |
-| `NORN_URL` | — | Dashboard URL for auto-enable streaming |
 | `NORN_CORS_ORIGINS` | `http://localhost:5173,...` | Comma-separated allowed CORS origins |
 
 ### Dashboard Configuration (`norn_logs/config.json`)

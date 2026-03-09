@@ -109,9 +109,6 @@ cd norn
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[api]"
 
-# Install zero-code hook (enables NORN_AUTO_ENABLE=true for zero-code monitoring)
-cp norn-autoload.pth .venv/lib/python*/site-packages/
-
 # Configure AWS credentials (Option A: .env file)
 cp .env.example .env
 # Edit .env — add your AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_DEFAULT_REGION
@@ -170,31 +167,6 @@ agent("Summarize the latest AI research papers")
 ```
 
 Every tool call is now tracked on the dashboard in real time.
-
-### Zero-Code Integration *(no agent code changes needed)*
-
-Install the SDK and add environment variables to your shell profile:
-
-```bash
-pip install norn-sdk
-
-# Add to ~/.zshrc or ~/.bashrc
-export NORN_AUTO_ENABLE=true
-export NORN_URL=http://localhost:8000
-export NORN_MODE=monitor   # monitor | intervene | enforce
-```
-
-Reload your shell (`source ~/.zshrc`) and run any Strands agent — it is automatically monitored on the dashboard with no code changes.
-
-```python
-# your_agent.py — completely unchanged
-from strands import Agent
-
-agent = Agent(tools=[...])
-agent("do something")  # automatically monitored
-```
-
-> **How it works:** `pip install norn-sdk` places a `norn-autoload.pth` file in your Python `site-packages`. When `NORN_AUTO_ENABLE=true` is set, Python auto-imports norn at startup and monkey-patches `Agent.__init__` to inject monitoring.
 
 ### Multi-Agent Swarm
 

@@ -502,9 +502,6 @@ class NornHook(HookProvider):
             import concurrent.futures as _cf
 
             def _eval_target():
-                from norn.proxy import _norn_eval_flag
-                _norn_eval_flag.active = True
-
                 import sys as _sys
                 _saved_out, _saved_err = _sys.stdout, _sys.stderr
                 _sys.stdout = _NullWriter()
@@ -518,7 +515,6 @@ class NornHook(HookProvider):
                         new_loop.close()
                         asyncio.set_event_loop(None)
                 finally:
-                    _norn_eval_flag.active = False
                     _sys.stdout = _saved_out
                     _sys.stderr = _saved_err
 
