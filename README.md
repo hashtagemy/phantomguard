@@ -109,14 +109,9 @@ cd norn
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[api]"
 
-# Configure AWS credentials (Option A: .env file)
+# Configure AWS credentials
 cp .env.example .env
 # Edit .env — add your AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_DEFAULT_REGION
-
-# Or export from your shell profile (Option B: ~/.zshrc or ~/.bashrc)
-# export AWS_ACCESS_KEY_ID=your-access-key-id
-# export AWS_SECRET_ACCESS_KEY=your-secret-access-key
-# export AWS_DEFAULT_REGION=us-east-1
 
 # Install dashboard
 cd norn-dashboard && npm install && cd ..
