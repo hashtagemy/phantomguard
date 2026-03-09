@@ -12,6 +12,7 @@ This file only:
 
 import logging
 import os
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -40,7 +41,7 @@ app = FastAPI(title="Norn API", version="1.0.0")
 # CORS — origins configurable via env (comma-separated list)
 _cors_origins = os.environ.get(
     "NORN_CORS_ORIGINS",
-    "http://localhost:5173,http://localhost:3000,http://localhost:3001",
+    "http://localhost:3000,http://localhost:3001",
 ).split(",")
 
 app.add_middleware(
@@ -100,7 +101,8 @@ for _router_mod in (
 
 
 # ── Serve React Frontend ──────────────────────────────────────────────────────
-frontend_dist = os.environ.get("FRONTEND_DIST", "/app/frontend/dist")
+_default_dist = str(Path(__file__).resolve().parent.parent / "norn-dashboard" / "dist")
+frontend_dist = os.environ.get("FRONTEND_DIST", _default_dist)
 if os.path.exists(frontend_dist):
     # Mount build assets
     assets_dir = os.path.join(frontend_dist, "assets")
@@ -118,4 +120,4 @@ if os.path.exists(frontend_dist):
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="::", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
