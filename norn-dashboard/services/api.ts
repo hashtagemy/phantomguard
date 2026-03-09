@@ -371,6 +371,36 @@ class ApiClient {
     return this.request<Stats>('/api/stats');
   }
 
+  // Export — download session or swarm report as Markdown
+  async exportSessionMd(sessionId: string): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/api/sessions/${sessionId}/export/md`);
+    if (!response.ok) throw new Error(`Export failed: HTTP ${response.status}`);
+    const blob = await response.blob();
+    const filename = response.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1]
+      || `norn_report_${sessionId}.md`;
+    this._downloadBlob(blob, filename);
+  }
+
+  async exportSwarmMd(swarmId: string): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/api/swarms/${swarmId}/export/md`);
+    if (!response.ok) throw new Error(`Export failed: HTTP ${response.status}`);
+    const blob = await response.blob();
+    const filename = response.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1]
+      || `norn_swarm_${swarmId}.md`;
+    this._downloadBlob(blob, filename);
+  }
+
+  private _downloadBlob(blob: Blob, filename: string): void {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   // Health check — uses plain fetch without Content-Type to avoid CORS preflight
   async healthCheck(): Promise<{ status: string; service: string }> {
     const response = await fetch(`${this.baseUrl}/api/health`);

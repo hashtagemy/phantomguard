@@ -1,7 +1,8 @@
 import React from 'react';
 import { Session } from '../types';
 import { StatusBadge } from './StatusBadge';
-import { ChevronRight, Search, Filter, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { ChevronRight, Search, Filter, ShieldCheck, ShieldAlert, Download } from 'lucide-react';
+import { api } from '../services/api';
 
 interface SessionListProps {
   sessions: Session[];
@@ -75,6 +76,13 @@ export const SessionList: React.FC<SessionListProps> = ({ sessions, onSelectSess
 
             <div className="col-span-2 text-right flex items-center justify-end gap-2 text-gray-500">
               <span className="text-xs font-mono">{new Date(session.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+              <button
+                onClick={(e) => { e.stopPropagation(); api.exportSessionMd(session.id); }}
+                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-dark-border/50 text-gray-500 hover:text-emerald-400"
+                title="Download report"
+              >
+                <Download size={13} />
+              </button>
               <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
           </div>

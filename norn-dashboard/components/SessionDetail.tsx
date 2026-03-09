@@ -10,7 +10,7 @@ import {
   Cpu,
   ArrowLeft,
   Bot,
-  BarChart3
+  BarChart3,
 } from 'lucide-react';
 
 interface SessionDetailProps {
@@ -61,7 +61,7 @@ export const SessionDetail: React.FC<SessionDetailProps> = ({ session, onBack, o
       {/* Header */}
       <div className="flex items-center justify-between mb-6 pb-6 border-b border-dark-border">
         <div className="flex items-center gap-4">
-          <button 
+          <button
             onClick={onBack}
             className="p-2 rounded-lg hover:bg-dark-surface text-gray-400 hover:text-white transition-colors"
           >

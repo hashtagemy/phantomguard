@@ -1,6 +1,7 @@
 import React from 'react';
 import { Session } from '../../types';
-import { Cpu, Microscope, Lightbulb, AlertCircle, AlertTriangle, Info, XCircle, Wrench, Brain, Zap, Clock } from 'lucide-react';
+import { Cpu, Microscope, Lightbulb, AlertCircle, AlertTriangle, Info, XCircle, Wrench, Brain, Zap, Clock, Download } from 'lucide-react';
+import { api } from '../../services/api';
 
 interface AIAnalysisPanelProps {
   session: Session;
@@ -68,6 +69,16 @@ export const AIAnalysisPanel: React.FC<AIAnalysisPanelProps> = ({ session, allSe
             }`}>
               {isTerminated && !hasAiEval ? 'Terminated' : 'AI Generated'}
             </span>
+            {hasAiEval && (
+              <button
+                onClick={() => api.exportSessionMd(session.id)}
+                className="flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-medium text-emerald-400 border-emerald-500/30 hover:bg-emerald-900/20 transition-colors"
+                title="Download audit report"
+              >
+                <Download size={10} />
+                Export
+              </button>
+            )}
           </div>
         </div>
 

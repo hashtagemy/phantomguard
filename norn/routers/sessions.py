@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import PlainTextResponse
 
 from norn.shared import (
     SESSIONS_DIR,
@@ -356,6 +357,167 @@ def delete_session(session_id: str) -> Dict[str, str]:
         return {"status": "deleted", "id": session_id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/sessions/{session_id}/export/md", dependencies=[Depends(verify_api_key)])
+def export_session_md(session_id: str) -> PlainTextResponse:
+    """Export a session report as a downloadable Markdown file."""
+    session_file = SESSIONS_DIR / f"{session_id}.json"
+    if not session_file.exists():
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    try:
+        with open(session_file) as f:
+            raw = json.load(f)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    md = _build_session_markdown(raw)
+    agent_name = (raw.get("agent_name") or "agent").replace(" ", "_").lower()
+    filename = f"norn_report_{agent_name}_{session_id[:8]}.md"
+
+    return PlainTextResponse(
+        content=md,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _build_session_markdown(s: Dict[str, Any]) -> str:
+    """Convert a raw session dict into a Markdown audit report."""
+    task = s.get("task") or {}
+    task_desc = task.get("description", "") if isinstance(task, dict) else str(task)
+
+    quality = s.get("overall_quality", "PENDING")
+    eff = s.get("efficiency_score")
+    sec = s.get("security_score")
+    conf = s.get("completion_confidence")
+    completed = s.get("task_completion")
+
+    lines: list[str] = []
+
+    lines.append(f"# Norn Audit Report — {s.get('agent_name', 'Unknown')}")
+    lines.append("")
+    lines.append(f"**Session:** `{s.get('session_id', '')}`  ")
+    if s.get("model"):
+        lines.append(f"**Model:** {s['model']}  ")
+    lines.append(f"**Date:** {s.get('started_at', '')} — {s.get('ended_at', 'in progress')}  ")
+    lines.append(f"**Status:** {s.get('status', 'unknown')}")
+    lines.append("")
+
+    lines.append("## Summary")
+    lines.append("")
+    lines.append("| Metric | Score |")
+    lines.append("|--------|-------|")
+    lines.append(f"| Overall Quality | **{quality}** |")
+    lines.append(f"| Efficiency | {eff}/100 |" if eff is not None else "| Efficiency | — |")
+    lines.append(f"| Security | {sec}/100 |" if sec is not None else "| Security | — |")
+    lines.append(f"| Completion Confidence | {conf}/100 |" if conf is not None else "| Completion Confidence | — |")
+    _comp_icon = "✓" if completed else ("✗" if completed is False else "—")
+    lines.append(f"| Task Completed | {_comp_icon} |")
+    lines.append(f"| Total Steps | {s.get('total_steps', 0)} |")
+    issues = s.get("issues", [])
+    lines.append(f"| Issues Detected | {len(issues)} |")
+    lines.append("")
+
+    if task_desc:
+        lines.append("## Task")
+        lines.append("")
+        lines.append(task_desc)
+        lines.append("")
+
+    ai_eval = s.get("ai_evaluation")
+    if ai_eval:
+        lines.append("## AI Evaluation")
+        lines.append("")
+        lines.append(ai_eval)
+        lines.append("")
+
+    tool_analysis = s.get("tool_analysis", [])
+    if tool_analysis:
+        lines.append("### Tool Analysis")
+        lines.append("")
+        lines.append("| Tool | Usage | Note |")
+        lines.append("|------|-------|------|")
+        for ta in tool_analysis:
+            tool = ta.get("tool", "")
+            usage = ta.get("usage", "")
+            note = ta.get("note", "").replace("|", "\\|")
+            lines.append(f"| {tool} | {usage} | {note} |")
+        lines.append("")
+
+    observations = s.get("decision_observations", [])
+    if observations:
+        lines.append("### Decision Observations")
+        lines.append("")
+        for obs in observations:
+            lines.append(f"- {obs}")
+        lines.append("")
+
+    eff_exp = s.get("efficiency_explanation", "")
+    if eff_exp:
+        lines.append("### Efficiency")
+        lines.append("")
+        lines.append(eff_exp)
+        lines.append("")
+
+    recs = s.get("recommendations", [])
+    if recs:
+        lines.append("### Recommendations")
+        lines.append("")
+        for rec in recs:
+            lines.append(f"- {rec}")
+        lines.append("")
+
+    steps = s.get("steps", [])
+    if steps:
+        lines.append("## Execution Steps")
+        lines.append("")
+        lines.append("| # | Tool | Relevance | Security | Status |")
+        lines.append("|---|------|-----------|----------|--------|")
+        for step in steps:
+            num = step.get("step_number", "")
+            tool = step.get("tool_name", "")
+            rel = f"{step['relevance_score']}%" if step.get("relevance_score") is not None else "—"
+            sec_s = f"{step['security_score']}%" if step.get("security_score") is not None else "—"
+            st = step.get("status", "SUCCESS")
+            icon = "✓" if st in ("SUCCESS", "REDUNDANT") else "✗"
+            lines.append(f"| {num} | {tool} | {rel} | {sec_s} | {icon} |")
+        lines.append("")
+
+    if issues:
+        lines.append("## Detected Issues")
+        lines.append("")
+        lines.append("| Severity | Type | Description | Recommendation |")
+        lines.append("|----------|------|-------------|----------------|")
+        for issue in issues:
+            sev = issue.get("severity", "")
+            itype = issue.get("issue_type", "")
+            desc = issue.get("description", "").replace("|", "\\|")[:120]
+            rec = issue.get("recommendation", "").replace("|", "\\|")[:120]
+            lines.append(f"| {sev} | {itype} | {desc} | {rec} |")
+        lines.append("")
+    else:
+        lines.append("## Detected Issues")
+        lines.append("")
+        lines.append("No issues detected.")
+        lines.append("")
+
+    if s.get("swarm_id"):
+        lines.append("## Swarm Info")
+        lines.append("")
+        lines.append(f"**Swarm ID:** `{s['swarm_id']}`  ")
+        lines.append(f"**Pipeline Order:** {s.get('swarm_order', '—')}")
+        if s.get("handoff_input"):
+            lines.append("")
+            lines.append("**Handoff Input:**")
+            lines.append(f"```\n{s['handoff_input'][:500]}\n```")
+        lines.append("")
+
+    lines.append("---")
+    lines.append("*Generated by Norn v0.2.0*")
+
+    return "\n".join(lines)
 
 
 @router.delete("/api/sessions/{session_id}/steps/{step_id}", dependencies=[Depends(verify_api_key)])

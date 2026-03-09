@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Network, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Clock, ArrowDown, MessageSquare, Cpu, Microscope, Brain, Lightbulb, GitMerge, Zap, Trash2 } from 'lucide-react';
+import { Network, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Clock, ArrowDown, MessageSquare, Cpu, Microscope, Brain, Lightbulb, GitMerge, Zap, Trash2, Download } from 'lucide-react';
 import { api } from '../services/api';
 
 interface SwarmAgent {
@@ -129,9 +129,19 @@ const SwarmAnalysisPanel: React.FC<{ swarmId: string }> = ({ swarmId }) => {
           <h3 className="text-xs font-semibold text-norn-300 flex items-center gap-2">
             <Cpu size={13} /> Amazon Nova AI Evaluation
           </h3>
-          <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border text-norn-400/70 border-norn-500/20">
-            AI Generated
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border text-norn-400/70 border-norn-500/20">
+              AI Generated
+            </span>
+            <button
+              onClick={() => api.exportSwarmMd(swarmId)}
+              className="flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-medium text-emerald-400 border-emerald-500/30 hover:bg-emerald-900/20 transition-colors"
+              title="Download swarm report"
+            >
+              <Download size={10} />
+              Export
+            </button>
+          </div>
         </div>
 
         <div className="p-4 space-y-4">
