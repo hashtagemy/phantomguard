@@ -7,6 +7,7 @@ Users don't need to modify their code!
 import logging
 import os
 import sys
+import threading
 from typing import Any, Optional
 from strands import Agent
 from strands.models import BedrockModel
@@ -15,6 +16,12 @@ from norn.core.interceptor import NornHook
 from norn.models.schemas import TaskDefinition
 
 logger = logging.getLogger("norn.proxy")
+
+_norn_eval_flag = threading.local()
+
+
+def _is_norn_eval_active():
+    return getattr(_norn_eval_flag, 'active', False)
 
 # Store original Agent class
 _OriginalAgent = Agent
@@ -133,7 +140,7 @@ def enable_global_monitoring(
         return False
 
     def monitored_init(self, *args, **kwargs):
-        if _called_from_norn():
+        if _is_norn_eval_active() or _called_from_norn():
             return original_agent_init(self, *args, **kwargs)
 
         task = None

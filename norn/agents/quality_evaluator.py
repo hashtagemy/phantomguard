@@ -8,9 +8,12 @@ import json
 import logging
 from typing import Any, Optional
 
+from botocore.config import Config as BotocoreConfig
 from strands import Agent
 from strands.handlers.callback_handler import null_callback_handler
 from strands.models import BedrockModel
+
+_BEDROCK_CONFIG = BotocoreConfig(max_pool_connections=5, retries={"max_attempts": 2})
 
 from norn.models.schemas import (
     QualityIssue,
@@ -44,8 +47,7 @@ class QualityEvaluator:
             fast_model_id: Bedrock model ID for per-step checks — Nova Lite by default
             temperature: Model temperature (lower = more deterministic)
         """
-        # Primary model for deep evaluation
-        self.model = BedrockModel(model_id=model_id, temperature=temperature)
+        self.model = BedrockModel(model_id=model_id, temperature=temperature, boto_client_config=_BEDROCK_CONFIG)
         self.agent = Agent(
             model=self.model,
             callback_handler=null_callback_handler,
@@ -82,7 +84,7 @@ Be objective and specific. Reference actual tool names and step counts in your a
         )
         
         # Fast model for per-step relevance and security checks
-        self.fast_model = BedrockModel(model_id=fast_model_id, temperature=temperature)
+        self.fast_model = BedrockModel(model_id=fast_model_id, temperature=temperature, boto_client_config=_BEDROCK_CONFIG)
         self.fast_agent = Agent(
             model=self.fast_model,
             callback_handler=null_callback_handler,

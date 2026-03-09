@@ -75,9 +75,6 @@ all = [
 requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools.data-files]
-"." = ["norn-autoload.pth"]
-
 [tool.setuptools.packages.find]
 include = ["norn*"]
 exclude = ["tests*", "norn-dashboard*"]

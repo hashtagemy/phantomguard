@@ -82,6 +82,15 @@ def _mask_sensitive(data: Any) -> Any:
     return data
 
 
+class _NullWriter:
+    """No-op writer that consumes output without opening a file descriptor."""
+    def write(self, *a, **kw): return 0
+    def writelines(self, *a, **kw): pass
+    def flush(self): pass
+    def close(self): pass
+    def isatty(self): return False
+
+
 class NornHook(HookProvider):
     """
     Quality monitoring hook for Strands agents.
@@ -211,12 +220,9 @@ class NornHook(HookProvider):
         self._loop_detected = False
         self._steps_to_evaluate = []
         self.step_analyzer.reset()
-        # Reset auto-detected task so it gets re-captured from THIS invocation's
-        # first user message. Explicit tasks (passed to constructor) persist as-is.
         if not self._explicit_task:
             self.task = None
 
-        # Try to extract model name from the agent
         model_name = None
         agent = event.agent
         if hasattr(agent, "model_id"):
@@ -224,21 +230,18 @@ class NornHook(HookProvider):
         elif hasattr(agent, "model"):
             model_name = str(agent.model) if agent.model else None
 
-        # Fixed session ID — unique per swarm run, persistent for solo hook agents
         if self._norn_url and self._external_agent_name:
             slug = "".join(
                 c if c.isalnum() or c == "_" else "_"
                 for c in self._external_agent_name.lower().replace(" ", "_")
             )
             if self.swarm_id:
-                # Swarm agent: unique session per swarm run (swarm_id already has timestamp)
                 swarm_slug = "".join(
                     c if c.isalnum() or c == "_" else "_"
                     for c in self.swarm_id
                 )
                 fixed_session_id = f"swarm-{swarm_slug}-{slug}"
             else:
-                # Solo hook agent: unique session per run
                 run_tag = datetime.now().strftime("%Y%m%d-%H%M%S")
                 fixed_session_id = f"hook-{slug}-{run_tag}"
         else:
@@ -253,8 +256,6 @@ class NornHook(HookProvider):
             handoff_input=self.handoff_input,
         )
 
-        # Apply session ID: explicit session_id always wins (enables persistent sessions);
-        # fall back to auto-generated slug, then to runner-provided ID.
         if self.session_id:
             self._session_report.session_id = self.session_id
         elif fixed_session_id:
@@ -262,8 +263,6 @@ class NornHook(HookProvider):
 
         logger.info(f"Session started: {self._agent_name}")
 
-        # Dashboard entegrasyonu — register BEFORE system prompt check
-        # so enforce termination still appears on dashboard.
         if self._norn_url:
             self._dashboard_on_session_start()
 
@@ -503,14 +502,13 @@ class NornHook(HookProvider):
             import concurrent.futures as _cf
 
             def _eval_target():
-                # Suppress ALL stdout/stderr during AI evaluation.
-                # Strands' PrintingCallbackHandler calls sys.stdout.write();
-                # replacing the object (not just the fd) avoids Python IO
-                # buffer flush leaking output after fd-level restore.
+                from norn.proxy import _norn_eval_flag
+                _norn_eval_flag.active = True
+
                 import sys as _sys
                 _saved_out, _saved_err = _sys.stdout, _sys.stderr
-                _sys.stdout = open(os.devnull, "w")
-                _sys.stderr = open(os.devnull, "w")
+                _sys.stdout = _NullWriter()
+                _sys.stderr = _NullWriter()
                 try:
                     new_loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(new_loop)
@@ -520,8 +518,7 @@ class NornHook(HookProvider):
                         new_loop.close()
                         asyncio.set_event_loop(None)
                 finally:
-                    _sys.stdout.close()
-                    _sys.stderr.close()
+                    _norn_eval_flag.active = False
                     _sys.stdout = _saved_out
                     _sys.stderr = _saved_err
 
