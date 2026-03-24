@@ -1,6 +1,6 @@
 [project]
 name = "norn-sdk"
-version = "0.2.0"
+version = "0.2.1"
 description = "AI Agent Quality & Security Monitoring Platform — Real-time execution tracking, loop detection, security analysis, and multi-agent swarm monitoring for Strands agents using Amazon Nova"
 readme = "README.md"
 license = {text = "Apache-2.0"}
